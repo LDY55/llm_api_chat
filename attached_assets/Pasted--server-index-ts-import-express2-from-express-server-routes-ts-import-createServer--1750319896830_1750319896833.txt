@@ -1,0 +1,503 @@
+// server/index.ts
+import express2 from "express";
+
+// server/routes.ts
+import { createServer } from "http";
+
+// server/storage.ts
+var MemStorage = class {
+  users;
+  systemPrompts;
+  chatMessages;
+  apiConfiguration;
+  currentUserId;
+  currentPromptId;
+  currentMessageId;
+  currentConfigId;
+  constructor() {
+    this.users = /* @__PURE__ */ new Map();
+    this.systemPrompts = /* @__PURE__ */ new Map();
+    this.chatMessages = /* @__PURE__ */ new Map();
+    this.apiConfiguration = void 0;
+    this.currentUserId = 1;
+    this.currentPromptId = 1;
+    this.currentMessageId = 1;
+    this.currentConfigId = 1;
+    this.initializeDefaultPrompts();
+  }
+  initializeDefaultPrompts() {
+    const defaultPrompts = [
+      {
+        name: "\u041F\u043E\u043C\u043E\u0449\u043D\u0438\u043A \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0438\u0441\u0442\u0430",
+        content: "\u0422\u044B \u043E\u043F\u044B\u0442\u043D\u044B\u0439 \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0438\u0441\u0442, \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u043F\u043E\u043C\u043E\u0433\u0430\u0435\u0442 \u0440\u0435\u0448\u0430\u0442\u044C \u0437\u0430\u0434\u0430\u0447\u0438 \u0438 \u043E\u0431\u044A\u044F\u0441\u043D\u044F\u0435\u0442 \u043A\u043E\u0434 \u043F\u043E\u043D\u044F\u0442\u043D\u044B\u043C \u044F\u0437\u044B\u043A\u043E\u043C."
+      },
+      {
+        name: "\u041F\u0435\u0440\u0435\u0432\u043E\u0434\u0447\u0438\u043A",
+        content: "\u041F\u0435\u0440\u0435\u0432\u043E\u0434\u0438 \u0442\u0435\u043A\u0441\u0442\u044B \u043D\u0430 \u043B\u044E\u0431\u044B\u0435 \u044F\u0437\u044B\u043A\u0438, \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044F \u0441\u043C\u044B\u0441\u043B \u0438 \u0441\u0442\u0438\u043B\u044C \u043E\u0440\u0438\u0433\u0438\u043D\u0430\u043B\u0430."
+      },
+      {
+        name: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A \u0434\u0430\u043D\u043D\u044B\u0445",
+        content: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0439 \u0434\u0430\u043D\u043D\u044B\u0435, \u0441\u0442\u0440\u043E\u0439 \u0433\u0440\u0430\u0444\u0438\u043A\u0438 \u0438 \u0434\u0435\u043B\u0430\u0439 \u0432\u044B\u0432\u043E\u0434\u044B \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0438."
+      }
+    ];
+    defaultPrompts.forEach((prompt) => {
+      const id = this.currentPromptId++;
+      this.systemPrompts.set(id, {
+        id,
+        ...prompt,
+        createdAt: /* @__PURE__ */ new Date()
+      });
+    });
+  }
+  async getUser(id) {
+    return this.users.get(id);
+  }
+  async getUserByUsername(username) {
+    return Array.from(this.users.values()).find(
+      (user) => user.username === username
+    );
+  }
+  async createUser(insertUser) {
+    const id = this.currentUserId++;
+    const user = { ...insertUser, id };
+    this.users.set(id, user);
+    return user;
+  }
+  async getAllSystemPrompts() {
+    return Array.from(this.systemPrompts.values()).sort((a, b) => {
+      const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+      const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+      return aTime - bTime;
+    });
+  }
+  async getSystemPrompt(id) {
+    return this.systemPrompts.get(id);
+  }
+  async createSystemPrompt(insertPrompt) {
+    const id = this.currentPromptId++;
+    const prompt = {
+      ...insertPrompt,
+      id,
+      createdAt: /* @__PURE__ */ new Date()
+    };
+    this.systemPrompts.set(id, prompt);
+    return prompt;
+  }
+  async deleteSystemPrompt(id) {
+    return this.systemPrompts.delete(id);
+  }
+  async getAllChatMessages() {
+    return Array.from(this.chatMessages.values()).sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    );
+  }
+  async createChatMessage(insertMessage) {
+    const id = this.currentMessageId++;
+    const message = {
+      ...insertMessage,
+      id,
+      timestamp: /* @__PURE__ */ new Date()
+    };
+    this.chatMessages.set(id, message);
+    return message;
+  }
+  async clearChatMessages() {
+    this.chatMessages.clear();
+  }
+  async getApiConfiguration() {
+    return this.apiConfiguration;
+  }
+  async saveApiConfiguration(insertConfig) {
+    const id = this.currentConfigId++;
+    const config = {
+      ...insertConfig,
+      id
+    };
+    this.apiConfiguration = config;
+    return config;
+  }
+};
+var storage = new MemStorage();
+
+// shared/schema.ts
+import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+var users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull()
+});
+var systemPrompts = pgTable("system_prompts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow()
+});
+var chatMessages = pgTable("chat_messages", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  role: text("role").notNull(),
+  // 'user' or 'assistant'
+  timestamp: timestamp("timestamp").defaultNow()
+});
+var apiConfigurations = pgTable("api_configurations", {
+  id: serial("id").primaryKey(),
+  endpoint: text("endpoint").notNull(),
+  token: text("token").notNull(),
+  model: text("model").notNull()
+});
+var insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true
+});
+var insertSystemPromptSchema = createInsertSchema(systemPrompts).omit({
+  id: true,
+  createdAt: true
+});
+var insertChatMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  timestamp: true
+});
+var insertApiConfigurationSchema = createInsertSchema(apiConfigurations).omit({
+  id: true
+});
+
+// server/routes.ts
+async function registerRoutes(app2) {
+  app2.get("/api/prompts", async (req, res) => {
+    try {
+      const prompts = await storage.getAllSystemPrompts();
+      res.json(prompts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch prompts" });
+    }
+  });
+  app2.post("/api/prompts", async (req, res) => {
+    try {
+      const validatedData = insertSystemPromptSchema.parse(req.body);
+      const prompt = await storage.createSystemPrompt(validatedData);
+      res.status(201).json(prompt);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid prompt data" });
+    }
+  });
+  app2.delete("/api/prompts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteSystemPrompt(id);
+      if (deleted) {
+        res.status(204).send();
+      } else {
+        res.status(404).json({ message: "Prompt not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete prompt" });
+    }
+  });
+  app2.get("/api/messages", async (req, res) => {
+    try {
+      const messages = await storage.getAllChatMessages();
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+  app2.post("/api/messages", async (req, res) => {
+    try {
+      const validatedData = insertChatMessageSchema.parse(req.body);
+      const message = await storage.createChatMessage(validatedData);
+      res.status(201).json(message);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid message data" });
+    }
+  });
+  app2.delete("/api/messages", async (req, res) => {
+    try {
+      await storage.clearChatMessages();
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to clear messages" });
+    }
+  });
+  app2.get("/api/config", async (req, res) => {
+    try {
+      const config = await storage.getApiConfiguration();
+      res.json(config || null);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch configuration" });
+    }
+  });
+  app2.post("/api/config", async (req, res) => {
+    try {
+      const validatedData = insertApiConfigurationSchema.parse(req.body);
+      const config = await storage.saveApiConfiguration(validatedData);
+      res.json(config);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid configuration data" });
+    }
+  });
+  app2.post("/api/config/test", async (req, res) => {
+    try {
+      const config = await storage.getApiConfiguration();
+      if (!config) {
+        return res.status(400).json({ message: "API configuration not found" });
+      }
+      const testMessage = {
+        model: config.model,
+        messages: [{ role: "user", content: "Hello" }],
+        max_tokens: 10
+      };
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.token}`
+        },
+        body: JSON.stringify(testMessage)
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(400).json({
+          success: false,
+          message: `API Test Failed: ${response.status} ${response.statusText}`,
+          details: errorText
+        });
+      }
+      const data = await response.json();
+      res.json({
+        success: true,
+        message: "API connection successful",
+        response: data
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Test failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  app2.post("/api/chat", async (req, res) => {
+    try {
+      const { messages, systemPrompt } = req.body;
+      const config = await storage.getApiConfiguration();
+      if (!config) {
+        return res.status(400).json({ message: "API configuration not found" });
+      }
+      const apiMessages = [];
+      if (systemPrompt) {
+        apiMessages.push({
+          role: "system",
+          content: systemPrompt
+        });
+      }
+      apiMessages.push(...messages);
+      const requestPayload = {
+        model: config.model,
+        messages: apiMessages,
+        temperature: 0.7,
+        max_tokens: 2e3,
+        stream: false
+      };
+      console.log("Sending request to LLM API:", {
+        endpoint: config.endpoint,
+        model: config.model,
+        messagesCount: apiMessages.length
+      });
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${config.token}`
+        },
+        body: JSON.stringify(requestPayload)
+      });
+      console.log("LLM API response status:", response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("LLM API error response:", errorText);
+        let errorDetails = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetails = errorJson.error?.message || errorJson.message || errorText;
+        } catch (e) {
+        }
+        return res.status(response.status).json({
+          message: `LLM API Error: ${response.status} ${response.statusText}`,
+          details: errorDetails,
+          endpoint: config.endpoint
+        });
+      }
+      const data = await response.json();
+      console.log("LLM API success, response keys:", Object.keys(data));
+      res.json(data);
+    } catch (error) {
+      console.error("Chat API error:", error);
+      res.status(500).json({
+        message: "Failed to process chat request",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  const httpServer = createServer(app2);
+  return httpServer;
+}
+
+// server/vite.ts
+import express from "express";
+import fs from "fs";
+import path2 from "path";
+import { createServer as createViteServer, createLogger } from "vite";
+
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+var vite_config_default = defineConfig({
+  plugins: [
+    react(),
+    runtimeErrorOverlay(),
+    ...process.env.NODE_ENV !== "production" && process.env.REPL_ID !== void 0 ? [
+      await import("@replit/vite-plugin-cartographer").then(
+        (m) => m.cartographer()
+      )
+    ] : []
+  ],
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets")
+    }
+  },
+  root: path.resolve(import.meta.dirname, "client"),
+  build: {
+    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    emptyOutDir: true
+  },
+  server: {
+    fs: {
+      strict: true,
+      deny: ["**/.*"]
+    }
+  }
+});
+
+// server/vite.ts
+import { nanoid } from "nanoid";
+var viteLogger = createLogger();
+function log(message, source = "express") {
+  const formattedTime = (/* @__PURE__ */ new Date()).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
+async function setupVite(app2, server) {
+  const serverOptions = {
+    middlewareMode: true,
+    hmr: { server },
+    allowedHosts: true
+  };
+  const vite = await createViteServer({
+    ...vite_config_default,
+    configFile: false,
+    customLogger: {
+      ...viteLogger,
+      error: (msg, options) => {
+        viteLogger.error(msg, options);
+        process.exit(1);
+      }
+    },
+    server: serverOptions,
+    appType: "custom"
+  });
+  app2.use(vite.middlewares);
+  app2.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+    try {
+      const clientTemplate = path2.resolve(
+        import.meta.dirname,
+        "..",
+        "client",
+        "index.html"
+      );
+      let template = await fs.promises.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e);
+      next(e);
+    }
+  });
+}
+function serveStatic(app2) {
+  const distPath = path2.resolve(import.meta.dirname, "public");
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app2.use(express.static(distPath));
+  app2.use("*", (_req, res) => {
+    res.sendFile(path2.resolve(distPath, "index.html"));
+  });
+}
+
+// server/index.ts
+var app = express2();
+app.use(express2.json());
+app.use(express2.urlencoded({ extended: false }));
+app.use((req, res, next) => {
+  const start = Date.now();
+  const path3 = req.path;
+  let capturedJsonResponse = void 0;
+  const originalResJson = res.json;
+  res.json = function(bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (path3.startsWith("/api")) {
+      let logLine = `${req.method} ${path3} ${res.statusCode} in ${duration}ms`;
+      if (capturedJsonResponse) {
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      }
+      if (logLine.length > 80) {
+        logLine = logLine.slice(0, 79) + "\u2026";
+      }
+      log(logLine);
+    }
+  });
+  next();
+});
+(async () => {
+  const server = await registerRoutes(app);
+  app.use((err, _req, res, _next) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+    res.status(status).json({ message });
+    throw err;
+  });
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    serveStatic(app);
+  }
+  const port = 5e3;
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true
+  }, () => {
+    log(`serving on port ${port}`);
+  });
+})();
