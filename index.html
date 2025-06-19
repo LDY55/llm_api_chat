@@ -158,6 +158,19 @@
             outline: none;
             border-color: #10b981;
         }
+        
+        .config-field input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        
+        .config-field label[for="useCorsProxy"] {
+             margin-bottom: 0;
+             font-size: 14px;
+             color: #e4e4e7;
+             cursor: pointer;
+        }
 
         .config-field input[list]::-webkit-calendar-picker-indicator {
             background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23e4e4e7" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat;
@@ -507,7 +520,6 @@
                         <option value="openai">OpenAI</option>
                         <option value="google">Google</option>
                         <option value="azure">Azure OpenAI</option>
-                        <option value="cors-proxy">OpenAI через CORS-прокси</option>
                         <option value="custom">Пользовательский</option>
                     </select>
                 </div>
@@ -516,6 +528,17 @@
                     <span id="activePromptName" style="padding: 8px 12px; background: #374151; border-radius: 6px; display: block;">Обычный ассистент</span>
                 </div>
                 <button class="clear-chat-btn" onclick="clearChat()">Очистить чат</button>
+            </div>
+            <!-- NEW: CORS Proxy Settings -->
+            <div class="config-row">
+                <div class="config-field" style="flex: 3;">
+                    <label for="corsProxyUrl">CORS Proxy URL (если API недоступно)</label>
+                    <input type="text" id="corsProxyUrl" onchange="saveConfiguration()">
+                </div>
+                <div class="config-field" style="display: flex; align-items: flex-end; justify-content: flex-start; padding-bottom: 5px; max-width: 120px;">
+                     <input type="checkbox" id="useCorsProxy" onchange="saveConfiguration()">
+                     <label for="useCorsProxy" style="margin-left: 8px;">Использовать</label>
+                </div>
             </div>
         </div>
 
@@ -616,7 +639,7 @@
                 item.innerHTML = `
                     <div class="prompt-name">${prompt.name}</div>
                     <div class="prompt-preview">${prompt.content.substring(0, 50)}...</div>
-                    ${prompt.id !== 'default' ? `<button class="delete-btn" onclick="deletePrompt('${prompt.id}')" title="Удалить">×</button>` : ''}
+                    ${prompt.id !== 'default' ? `<button class="delete-btn" onclick="event.stopPropagation(); deletePrompt('${prompt.id}')" title="Удалить">×</button>` : ''}
                 `;
                 
                 container.appendChild(item);
@@ -711,20 +734,16 @@
             const endpoints = {
                 openai: 'https://api.openai.com/v1/chat/completions',
                 google: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
-                azure: 'https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2023-12-01-preview',
-                'cors-proxy': 'https://cors-anywhere.herokuapp.com/https://api.openai.com/v1/chat/completions'
+                azure: 'https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2023-12-01-preview'
             };
 
-            // Обновляем endpoint
             if (provider !== 'custom') {
                 endpoint.value = endpoints[provider] || '';
             }
 
-            // Предлагаем подходящую модель по умолчанию, если поле пустое
             if (!modelField.value.trim()) {
                 const defaultModels = {
                     openai: 'gpt-4',
-                    'cors-proxy': 'gpt-4',
                     google: 'gemini-pro',
                     azure: 'gpt-4',
                     custom: ''
@@ -732,39 +751,7 @@
                 modelField.value = defaultModels[provider] || '';
             }
             
-            // Показываем подсказку о CORS
-            if (provider === 'openai' || provider === 'google') {
-                showCorsWarning();
-            }
-            
             saveConfiguration();
-        }
-
-        function showCorsWarning() {
-            const existingWarning = document.getElementById('corsWarning');
-            if (existingWarning) return;
-
-            const warning = document.createElement('div');
-            warning.id = 'corsWarning';
-            warning.style.cssText = `
-                background: #fbbf24;
-                color: #000;
-                padding: 10px;
-                border-radius: 6px;
-                margin-top: 10px;
-                font-size: 12px;
-                line-height: 1.4;
-            `;
-            warning.innerHTML = `
-                <strong>⚠️ Предупреждение о CORS:</strong> Браузеры могут блокировать прямые запросы к API. 
-                Если получаете ошибку "Failed to fetch", попробуйте:
-                <br>• Использовать CORS-прокси (добавьте в начало URL: https://cors-anywhere.herokuapp.com/)
-                <br>• Установить браузерное расширение для отключения CORS
-                <br>• Использовать локальный сервер
-                <button onclick="this.parentElement.remove()" style="background: #000; color: #fbbf24; border: none; padding: 2px 6px; border-radius: 3px; margin-left: 10px; cursor: pointer;">×</button>
-            `;
-            
-            document.querySelector('.header').appendChild(warning);
         }
 
         function loadConfiguration() {
@@ -775,10 +762,14 @@
                 document.getElementById('token').value = parsed.token || '';
                 document.getElementById('model').value = parsed.model || 'gpt-4';
                 document.getElementById('provider').value = parsed.provider || 'openai';
+                document.getElementById('corsProxyUrl').value = parsed.corsProxyUrl || 'https://proxy.cors.sh/';
+                document.getElementById('useCorsProxy').checked = parsed.useCorsProxy === true;
             } else {
                 // Устанавливаем значения по умолчанию при первом запуске
-                document.getElementById('model').value = 'gpt-4';
                 document.getElementById('provider').value = 'openai';
+                document.getElementById('model').value = 'gpt-4';
+                document.getElementById('corsProxyUrl').value = 'https://proxy.cors.sh/';
+                document.getElementById('useCorsProxy').checked = true; // Включено по умолчанию
                 updateEndpoint();
             }
         }
@@ -788,7 +779,9 @@
                 endpoint: document.getElementById('endpoint').value,
                 token: document.getElementById('token').value,
                 model: document.getElementById('model').value,
-                provider: document.getElementById('provider').value
+                provider: document.getElementById('provider').value,
+                corsProxyUrl: document.getElementById('corsProxyUrl').value,
+                useCorsProxy: document.getElementById('useCorsProxy').checked
             };
             localStorage.setItem('apiConfig', JSON.stringify(config));
         }
@@ -895,12 +888,10 @@
                 return;
             }
 
-            // Добавляем сообщение пользователя
             addMessage('user', message);
             input.value = '';
             autoResizeTextarea(input);
 
-            // Показываем индикатор загрузки
             isLoading = true;
             document.getElementById('sendBtn').disabled = true;
             showLoadingMessage();
@@ -925,49 +916,54 @@
         async function callAPI(endpoint, token, model, userMessage, systemMessage) {
             const provider = document.getElementById('provider').value;
             
-            // Проверяем, поддерживает ли браузер CORS для данного endpoint
+            // NEW: Logic to prepend proxy
+            const useProxy = document.getElementById('useCorsProxy').checked;
+            const proxyUrl = document.getElementById('corsProxyUrl').value.trim();
+            let finalEndpoint = endpoint;
+
+            if (useProxy && proxyUrl) {
+                // Ensure proxyUrl ends with a slash for proper concatenation
+                const formattedProxyUrl = proxyUrl.endsWith('/') ? proxyUrl : `${proxyUrl}/`;
+                finalEndpoint = formattedProxyUrl + endpoint;
+            }
+
             try {
                 let requestBody;
                 let headers = {
                     'Content-Type': 'application/json'
                 };
 
-                if (provider === 'openai' || provider === 'azure') {
+                if (provider === 'openai' || provider === 'azure' || provider === 'custom') {
                     headers['Authorization'] = `Bearer ${token}`;
                     requestBody = {
                         model: model,
                         messages: [
                             ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
+                            ...chatHistory, // Send chat history
                             { role: 'user', content: userMessage }
                         ],
                         temperature: 0.7
                     };
                 } else if (provider === 'google') {
-                    headers['x-goog-api-key'] = token;
+                    // Google API expects a different header and body structure
+                    finalEndpoint = finalEndpoint.includes('?key=') ? finalEndpoint : `${finalEndpoint}?key=${token}`;
+                    const historyForGoogle = chatHistory.map(msg => ({
+                        role: msg.role === 'assistant' ? 'model' : 'user',
+                        parts: [{text: msg.content}]
+                    }));
+
                     requestBody = {
-                        contents: [{
-                            parts: [{
-                                text: (systemMessage ? systemMessage + '\n\n' : '') + userMessage
-                            }]
-                        }],
+                        contents: [
+                            ...historyForGoogle,
+                            { role: 'user', parts: [{ text: (systemMessage ? systemMessage + '\n\n' : '') + userMessage }] }
+                        ],
                         generationConfig: {
                             temperature: 0.7
                         }
                     };
-                } else if (provider === 'custom') {
-                    // Для пользовательских endpoint'ов пробуем стандартный формат OpenAI
-                    headers['Authorization'] = `Bearer ${token}`;
-                    requestBody = {
-                        model: model,
-                        messages: [
-                            ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
-                            { role: 'user', content: userMessage }
-                        ],
-                        temperature: 0.7
-                    };
                 }
-
-                const response = await fetch(endpoint, {
+                
+                const response = await fetch(finalEndpoint, {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify(requestBody),
@@ -990,9 +986,8 @@
             } catch (error) {
                 console.error('API Error:', error);
                 
-                // Если ошибка CORS, предлагаем решения
-                if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
-                    throw new Error(`CORS Error: Браузер блокирует запрос к API.\n\nВозможные решения:\n1. Используйте CORS-прокси (например, добавьте "https://cors-anywhere.herokuapp.com/" перед URL)\n2. Установите браузерное расширение для отключения CORS\n3. Используйте локальный прокси-сервер\n4. Разверните приложение на сервере с поддержкой CORS\n\nПодробности: ${error.message}`);
+                if (error.message.includes('Failed to fetch')) {
+                    throw new Error(`Ошибка сети: Не удалось выполнить запрос.\n\nВозможные причины:\n1. Проверьте подключение к интернету.\n2. Убедитесь, что URL Endpoint и CORS Proxy верны.\n3. CORS Proxy может быть временно недоступен или блокировать запросы. Попробуйте другой, например https://cors.eu.org/\n4. API может быть заблокировано в вашей сети.`);
                 }
                 
                 throw error;
