@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Chat Assistant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1d29;
+            color: #e4e4e7;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #2a2d3a;
+            border-right: 1px solid #3f3f46;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #3f3f46;
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #10b981;
+            margin-bottom: 20px;
+        }
+
+        .prompt-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 10px;
+        }
+
+        .prompt-item {
+            padding: 12px 15px;
+            margin: 5px 0;
+            background: #374151;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .prompt-item:hover {
+            background: #4b5563;
+        }
+
+        .prompt-item.active {
+            background: #10b981;
+            color: #000;
+        }
+
+        .prompt-item .prompt-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .prompt-item .prompt-preview {
+            font-size: 12px;
+            opacity: 0.7;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .prompt-item .delete-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .prompt-item:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .add-prompt-btn {
+            margin: 20px;
+            padding: 12px;
+            background: #10b981;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .add-prompt-btn:hover {
+            background: #059669;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid #3f3f46;
+            background: #2a2d3a;
+        }
+
+        .config-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .config-field {
+            flex: 1;
+        }
+
+        .config-field label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .config-field input, .config-field select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: #e4e4e7;
+            font-size: 14px;
+        }
+
+        .config-field input:focus, .config-field select:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+        
+        .config-field input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        
+        .config-field label[for="useCorsProxy"] {
+             margin-bottom: 0;
+             font-size: 14px;
+             color: #e4e4e7;
+             cursor: pointer;
+        }
+
+        .config-field input[list]::-webkit-calendar-picker-indicator {
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23e4e4e7" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat;
+            background-size: 16px;
+            cursor: pointer;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            max-width: 80%;
+        }
+
+        .message.user {
+            margin-left: auto;
+        }
+
+        .message.assistant {
+            margin-right: auto;
+        }
+
+        .message-content {
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #10b981;
+            color: #000;
+        }
+
+        .message.assistant .message-content {
+            background: #374151;
+            color: #e4e4e7;
+        }
+
+        .message.assistant .message-content h1,
+        .message.assistant .message-content h2,
+        .message.assistant .message-content h3 {
+            margin: 0.5em 0;
+        }
+
+        .message.assistant .message-content pre {
+            background: #1f2937;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .message.assistant .message-content code {
+            background: #1f2937;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .message.assistant .message-content pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .loading-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #374151;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            max-width: 80%;
+        }
+
+        .loading-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .loading-dots span {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: loading 1.4s infinite ease-in-out;
+        }
+
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes loading {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid #3f3f46;
+            background: #2a2d3a;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1;
+            min-height: 40px;
+            max-height: 120px;
+            padding: 10px 15px;
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 12px;
+            color: #e4e4e7;
+            resize: none;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: #10b981;
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            min-width: 80px;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background: #059669;
+        }
+
+        .send-btn:disabled {
+            background: #4b5563;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #2a2d3a;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-btn:hover {
+            color: #e4e4e7;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            background: #374151;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            color: #e4e4e7;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #10b981;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #10b981;
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            background: #059669;
+        }
+
+        .btn-secondary {
+            background: #4b5563;
+            color: #e4e4e7;
+        }
+
+        .btn-secondary:hover {
+            background: #6b7280;
+        }
+
+        .clear-chat-btn {
+            padding: 8px 15px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        .clear-chat-btn:hover {
+            background: #dc2626;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Системные промпты</div>
+        </div>
+        <div class="prompt-list" id="promptList">
+            <!-- Промпты будут добавлены динамически -->
+        </div>
+        <button class="add-prompt-btn" onclick="openPromptModal()">+ Добавить</button>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <div class="config-row">
+                <div class="config-field">
+                    <label>Endpoint (API URL)</label>
+                    <input type="text" id="endpoint" placeholder="https://api.openai.com/v1/chat/completions">
+                </div>
+                <div class="config-field">
+                    <label>Token</label>
+                    <input type="password" id="token" placeholder="API ключ">
+                </div>
+                <div class="config-field">
+                    <label>Модель</label>
+                    <div style="position: relative;">
+                        <input type="text" id="model" placeholder="Введите название модели" list="modelSuggestions">
+                        <datalist id="modelSuggestions">
+                            <option value="gpt-4">
+                            <option value="gpt-4-turbo">
+                            <option value="gpt-3.5-turbo">
+                            <option value="claude-3-opus-20240229">
+                            <option value="claude-3-sonnet-20240229">
+                            <option value="claude-3-haiku-20240307">
+                            <option value="gemini-pro">
+                            <option value="gemini-1.5-pro">
+                            <option value="llama-2-70b-chat">
+                            <option value="mixtral-8x7b-instruct">
+                            <option value="text-davinci-003">
+                        </datalist>
+                    </div>
+                </div>
+            </div>
+            <div class="config-row">
+                <div class="config-field">
+                    <label>Поставщик API</label>
+                    <select id="provider" onchange="updateEndpoint()">
+                        <option value="openai">OpenAI</option>
+                        <option value="google">Google</option>
+                        <option value="azure">Azure OpenAI</option>
+                        <option value="custom">Пользовательский</option>
+                    </select>
+                </div>
+                <div class="config-field" style="flex: 2;">
+                    <label>Активный системный промпт</label>
+                    <span id="activePromptName" style="padding: 8px 12px; background: #374151; border-radius: 6px; display: block;">Обычный ассистент</span>
+                </div>
+                <button class="clear-chat-btn" onclick="clearChat()">Очистить чат</button>
+            </div>
+            <!-- NEW: CORS Proxy Settings -->
+            <div class="config-row">
+                <div class="config-field" style="flex: 3;">
+                    <label for="corsProxyUrl">CORS Proxy URL (если API недоступно)</label>
+                    <input type="text" id="corsProxyUrl" onchange="saveConfiguration()">
+                </div>
+                <div class="config-field" style="display: flex; align-items: flex-end; justify-content: flex-start; padding-bottom: 5px; max-width: 120px;">
+                     <input type="checkbox" id="useCorsProxy" onchange="saveConfiguration()">
+                     <label for="useCorsProxy" style="margin-left: 8px;">Использовать</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <!-- Сообщения будут добавлены динамически -->
+            </div>
+            <div class="chat-input">
+                <div class="input-container">
+                    <textarea 
+                        id="messageInput" 
+                        class="input-field" 
+                        placeholder="Введите ваше сообщение..."
+                        rows="1"
+                        onkeydown="handleInputKeydown(event)"
+                        oninput="autoResizeTextarea(this)"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">Отправить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для создания/редактирования промптов -->
+    <div class="modal hidden" id="promptModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Добавить системный промпт</h2>
+                <button class="close-btn" onclick="closePromptModal()">&times;</button>
+            </div>
+            <form id="promptForm">
+                <div class="form-group">
+                    <label for="promptName">Название</label>
+                    <input type="text" id="promptName" required>
+                </div>
+                <div class="form-group">
+                    <label for="promptContent">Промпт</label>
+                    <textarea id="promptContent" placeholder="Сначала заполните конфигурацию" required></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Глобальные переменные
+        let systemPrompts = [];
+        let activePromptId = null;
+        let chatHistory = [];
+        let isLoading = false;
+
+        // Инициализация приложения
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSystemPrompts();
+            loadChatHistory();
+            loadConfiguration();
+            renderPromptList();
+            renderChatMessages();
+        });
+
+        // Работа с системными промптами
+        function loadSystemPrompts() {
+            const saved = localStorage.getItem('systemPrompts');
+            if (saved) {
+                systemPrompts = JSON.parse(saved);
+            } else {
+                // Добавляем промпт по умолчанию
+                systemPrompts = [
+                    {
+                        id: 'default',
+                        name: 'Обычный ассистент',
+                        content: 'Ты полезный ИИ-ассистент. Отвечай на вопросы пользователя максимально точно и подробно.'
+                    }
+                ];
+                saveSystemPrompts();
+            }
+            if (!activePromptId) {
+                activePromptId = systemPrompts[0]?.id || null;
+            }
+        }
+
+        function saveSystemPrompts() {
+            localStorage.setItem('systemPrompts', JSON.stringify(systemPrompts));
+        }
+
+        function renderPromptList() {
+            const container = document.getElementById('promptList');
+            container.innerHTML = '';
+
+            systemPrompts.forEach(prompt => {
+                const item = document.createElement('div');
+                item.className = `prompt-item ${prompt.id === activePromptId ? 'active' : ''}`;
+                item.onclick = () => selectPrompt(prompt.id);
+                
+                item.innerHTML = `
+                    <div class="prompt-name">${prompt.name}</div>
+                    <div class="prompt-preview">${prompt.content.substring(0, 50)}...</div>
+                    ${prompt.id !== 'default' ? `<button class="delete-btn" onclick="event.stopPropagation(); deletePrompt('${prompt.id}')" title="Удалить">×</button>` : ''}
+                `;
+                
+                container.appendChild(item);
+            });
+
+            updateActivePromptDisplay();
+        }
+
+        function selectPrompt(id) {
+            activePromptId = id;
+            renderPromptList();
+        }
+
+        function updateActivePromptDisplay() {
+            const activePrompt = systemPrompts.find(p => p.id === activePromptId);
+            document.getElementById('activePromptName').textContent = activePrompt ? activePrompt.name : 'Не выбран';
+        }
+
+        function openPromptModal(id = null) {
+            const modal = document.getElementById('promptModal');
+            const title = document.getElementById('modalTitle');
+            const form = document.getElementById('promptForm');
+            
+            if (id) {
+                const prompt = systemPrompts.find(p => p.id === id);
+                title.textContent = 'Редактировать промпт';
+                document.getElementById('promptName').value = prompt.name;
+                document.getElementById('promptContent').value = prompt.content;
+                form.dataset.editId = id;
+            } else {
+                title.textContent = 'Добавить системный промпт';
+                document.getElementById('promptName').value = '';
+                document.getElementById('promptContent').value = '';
+                delete form.dataset.editId;
+            }
+            
+            modal.classList.remove('hidden');
+        }
+
+        function closePromptModal() {
+            document.getElementById('promptModal').classList.add('hidden');
+        }
+
+        function deletePrompt(id) {
+            if (id === 'default') return;
+            
+            if (confirm('Удалить этот промпт?')) {
+                systemPrompts = systemPrompts.filter(p => p.id !== id);
+                if (activePromptId === id) {
+                    activePromptId = systemPrompts[0]?.id || null;
+                }
+                saveSystemPrompts();
+                renderPromptList();
+            }
+        }
+
+        // Обработка формы промпта
+        document.getElementById('promptForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('promptName').value.trim();
+            const content = document.getElementById('promptContent').value.trim();
+            const editId = this.dataset.editId;
+            
+            if (!name || !content) return;
+
+            if (editId) {
+                const prompt = systemPrompts.find(p => p.id === editId);
+                prompt.name = name;
+                prompt.content = content;
+            } else {
+                const newPrompt = {
+                    id: Date.now().toString(),
+                    name: name,
+                    content: content
+                };
+                systemPrompts.push(newPrompt);
+                activePromptId = newPrompt.id;
+            }
+
+            saveSystemPrompts();
+            renderPromptList();
+            closePromptModal();
+        });
+
+        // Конфигурация API
+        function updateEndpoint() {
+            const provider = document.getElementById('provider').value;
+            const endpoint = document.getElementById('endpoint');
+            const modelField = document.getElementById('model');
+            
+            const endpoints = {
+                openai: 'https://api.openai.com/v1/chat/completions',
+                google: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+                azure: 'https://your-resource.openai.azure.com/openai/deployments/your-deployment/chat/completions?api-version=2023-12-01-preview'
+            };
+
+            if (provider !== 'custom') {
+                endpoint.value = endpoints[provider] || '';
+            }
+
+            if (!modelField.value.trim()) {
+                const defaultModels = {
+                    openai: 'gpt-4',
+                    google: 'gemini-pro',
+                    azure: 'gpt-4',
+                    custom: ''
+                };
+                modelField.value = defaultModels[provider] || '';
+            }
+            
+            saveConfiguration();
+        }
+
+        function loadConfiguration() {
+            const config = localStorage.getItem('apiConfig');
+            if (config) {
+                const parsed = JSON.parse(config);
+                document.getElementById('endpoint').value = parsed.endpoint || '';
+                document.getElementById('token').value = parsed.token || '';
+                document.getElementById('model').value = parsed.model || 'gpt-4';
+                document.getElementById('provider').value = parsed.provider || 'openai';
+                document.getElementById('corsProxyUrl').value = parsed.corsProxyUrl || 'https://proxy.cors.sh/';
+                document.getElementById('useCorsProxy').checked = parsed.useCorsProxy === true;
+            } else {
+                // Устанавливаем значения по умолчанию при первом запуске
+                document.getElementById('provider').value = 'openai';
+                document.getElementById('model').value = 'gpt-4';
+                document.getElementById('corsProxyUrl').value = 'https://proxy.cors.sh/';
+                document.getElementById('useCorsProxy').checked = true; // Включено по умолчанию
+                updateEndpoint();
+            }
+        }
+
+        function saveConfiguration() {
+            const config = {
+                endpoint: document.getElementById('endpoint').value,
+                token: document.getElementById('token').value,
+                model: document.getElementById('model').value,
+                provider: document.getElementById('provider').value,
+                corsProxyUrl: document.getElementById('corsProxyUrl').value,
+                useCorsProxy: document.getElementById('useCorsProxy').checked
+            };
+            localStorage.setItem('apiConfig', JSON.stringify(config));
+        }
+
+        // Автосохранение конфигурации
+        ['endpoint', 'token', 'model', 'provider'].forEach(id => {
+            document.getElementById(id).addEventListener('change', saveConfiguration);
+        });
+
+        // Чат функционал
+        function loadChatHistory() {
+            const saved = localStorage.getItem('chatHistory');
+            if (saved) {
+                chatHistory = JSON.parse(saved);
+            }
+        }
+
+        function saveChatHistory() {
+            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+        }
+
+        function renderChatMessages() {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = '';
+
+            chatHistory.forEach(message => {
+                const messageEl = createMessageElement(message);
+                container.appendChild(messageEl);
+            });
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function createMessageElement(message) {
+            const div = document.createElement('div');
+            div.className = `message ${message.role}`;
+            
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            
+            if (message.role === 'assistant') {
+                content.innerHTML = marked.parse(message.content);
+            } else {
+                content.textContent = message.content;
+            }
+            
+            div.appendChild(content);
+            return div;
+        }
+
+        function addMessage(role, content) {
+            const message = { role, content, timestamp: Date.now() };
+            chatHistory.push(message);
+            saveChatHistory();
+            
+            const messageEl = createMessageElement(message);
+            document.getElementById('chatMessages').appendChild(messageEl);
+            scrollToBottom();
+        }
+
+        function showLoadingMessage() {
+            const container = document.getElementById('chatMessages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading-message';
+            loadingDiv.id = 'loadingMessage';
+            loadingDiv.innerHTML = `
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <span>Генерирую ответ...</span>
+            `;
+            container.appendChild(loadingDiv);
+            scrollToBottom();
+        }
+
+        function hideLoadingMessage() {
+            const loading = document.getElementById('loadingMessage');
+            if (loading) {
+                loading.remove();
+            }
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chatMessages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendMessage() {
+            if (isLoading) return;
+
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+
+            const endpoint = document.getElementById('endpoint').value;
+            const token = document.getElementById('token').value;
+            const model = document.getElementById('model').value;
+            
+            if (!endpoint || !token) {
+                alert('Пожалуйста, заполните Endpoint и Token');
+                return;
+            }
+
+            addMessage('user', message);
+            input.value = '';
+            autoResizeTextarea(input);
+
+            isLoading = true;
+            document.getElementById('sendBtn').disabled = true;
+            showLoadingMessage();
+
+            try {
+                const activePrompt = systemPrompts.find(p => p.id === activePromptId);
+                const systemMessage = activePrompt ? activePrompt.content : '';
+
+                const response = await callAPI(endpoint, token, model, message, systemMessage);
+                
+                hideLoadingMessage();
+                addMessage('assistant', response);
+            } catch (error) {
+                hideLoadingMessage();
+                addMessage('assistant', `Ошибка: ${error.message}`);
+            } finally {
+                isLoading = false;
+                document.getElementById('sendBtn').disabled = false;
+            }
+        }
+
+        async function callAPI(endpoint, token, model, userMessage, systemMessage) {
+            const provider = document.getElementById('provider').value;
+            
+            // NEW: Logic to prepend proxy
+            const useProxy = document.getElementById('useCorsProxy').checked;
+            const proxyUrl = document.getElementById('corsProxyUrl').value.trim();
+            let finalEndpoint = endpoint;
+
+            if (useProxy && proxyUrl) {
+                // Ensure proxyUrl ends with a slash for proper concatenation
+                const formattedProxyUrl = proxyUrl.endsWith('/') ? proxyUrl : `${proxyUrl}/`;
+                finalEndpoint = formattedProxyUrl + endpoint;
+            }
+
+            try {
+                let requestBody;
+                let headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                if (provider === 'openai' || provider === 'azure' || provider === 'custom') {
+                    headers['Authorization'] = `Bearer ${token}`;
+                    requestBody = {
+                        model: model,
+                        messages: [
+                            ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
+                            ...chatHistory, // Send chat history
+                            { role: 'user', content: userMessage }
+                        ],
+                        temperature: 0.7
+                    };
+                } else if (provider === 'google') {
+                    // Google API expects a different header and body structure
+                    finalEndpoint = finalEndpoint.includes('?key=') ? finalEndpoint : `${finalEndpoint}?key=${token}`;
+                    const historyForGoogle = chatHistory.map(msg => ({
+                        role: msg.role === 'assistant' ? 'model' : 'user',
+                        parts: [{text: msg.content}]
+                    }));
+
+                    requestBody = {
+                        contents: [
+                            ...historyForGoogle,
+                            { role: 'user', parts: [{ text: (systemMessage ? systemMessage + '\n\n' : '') + userMessage }] }
+                        ],
+                        generationConfig: {
+                            temperature: 0.7
+                        }
+                    };
+                }
+                
+                const response = await fetch(finalEndpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(requestBody),
+                    mode: 'cors'
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
+                }
+
+                const data = await response.json();
+
+                if (provider === 'google') {
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Нет ответа от API';
+                } else {
+                    return data.choices?.[0]?.message?.content || 'Нет ответа от API';
+                }
+
+            } catch (error) {
+                console.error('API Error:', error);
+                
+                if (error.message.includes('Failed to fetch')) {
+                    throw new Error(`Ошибка сети: Не удалось выполнить запрос.\n\nВозможные причины:\n1. Проверьте подключение к интернету.\n2. Убедитесь, что URL Endpoint и CORS Proxy верны.\n3. CORS Proxy может быть временно недоступен или блокировать запросы. Попробуйте другой, например https://cors.eu.org/\n4. API может быть заблокировано в вашей сети.`);
+                }
+                
+                throw error;
+            }
+        }
+
+        function clearChat() {
+            if (confirm('Очистить историю чата?')) {
+                chatHistory = [];
+                saveChatHistory();
+                renderChatMessages();
+            }
+        }
+
+        // Обработка ввода
+        function handleInputKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // Закрытие модальных окон по клику вне их
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
