@@ -1,0 +1,221 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema } from "@shared/schema";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // System Prompts routes
+  app.get("/api/prompts", async (req, res) => {
+    try {
+      const prompts = await storage.getAllSystemPrompts();
+      res.json(prompts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch prompts" });
+    }
+  });
+
+  app.post("/api/prompts", async (req, res) => {
+    try {
+      const validatedData = insertSystemPromptSchema.parse(req.body);
+      const prompt = await storage.createSystemPrompt(validatedData);
+      res.status(201).json(prompt);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid prompt data" });
+    }
+  });
+
+  app.delete("/api/prompts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteSystemPrompt(id);
+      if (deleted) {
+        res.status(204).send();
+      } else {
+        res.status(404).json({ message: "Prompt not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete prompt" });
+    }
+  });
+
+  // Chat Messages routes
+  app.get("/api/messages", async (req, res) => {
+    try {
+      const messages = await storage.getAllChatMessages();
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  app.post("/api/messages", async (req, res) => {
+    try {
+      const validatedData = insertChatMessageSchema.parse(req.body);
+      const message = await storage.createChatMessage(validatedData);
+      res.status(201).json(message);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid message data" });
+    }
+  });
+
+  app.delete("/api/messages", async (req, res) => {
+    try {
+      await storage.clearChatMessages();
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to clear messages" });
+    }
+  });
+
+  // API Configuration routes
+  app.get("/api/config", async (req, res) => {
+    try {
+      const config = await storage.getApiConfiguration();
+      res.json(config || null);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch configuration" });
+    }
+  });
+
+  app.post("/api/config", async (req, res) => {
+    try {
+      const validatedData = insertApiConfigurationSchema.parse(req.body);
+      const config = await storage.saveApiConfiguration(validatedData);
+      res.json(config);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid configuration data" });
+    }
+  });
+
+  // Test API connection
+  app.post("/api/config/test", async (req, res) => {
+    try {
+      const config = await storage.getApiConfiguration();
+      
+      if (!config) {
+        return res.status(400).json({ message: "API configuration not found" });
+      }
+
+      const testMessage = {
+        model: config.model,
+        messages: [{ role: "user", content: "Hello" }],
+        max_tokens: 10
+      };
+
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.token}`
+        },
+        body: JSON.stringify(testMessage)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(400).json({ 
+          success: false,
+          message: `API Test Failed: ${response.status} ${response.statusText}`,
+          details: errorText
+        });
+      }
+
+      const data = await response.json();
+      res.json({ 
+        success: true, 
+        message: "API connection successful",
+        response: data
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false,
+        message: "Test failed",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // LLM API proxy route
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const { messages, systemPrompt } = req.body;
+      const config = await storage.getApiConfiguration();
+      
+      if (!config) {
+        return res.status(400).json({ message: "API configuration not found" });
+      }
+
+      // Prepare messages for LLM API
+      const apiMessages = [];
+      
+      if (systemPrompt) {
+        apiMessages.push({
+          role: 'system',
+          content: systemPrompt
+        });
+      }
+
+      apiMessages.push(...messages);
+
+      // Prepare the request payload
+      const requestPayload = {
+        model: config.model,
+        messages: apiMessages,
+        temperature: 0.7,
+        max_tokens: 2000,
+        stream: false
+      };
+
+      console.log('Sending request to LLM API:', {
+        endpoint: config.endpoint,
+        model: config.model,
+        messagesCount: apiMessages.length
+      });
+
+      // Make request to LLM API
+      const response = await fetch(config.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.token}`
+        },
+        body: JSON.stringify(requestPayload)
+      });
+
+      console.log('LLM API response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('LLM API error response:', errorText);
+        
+        // Try to parse error as JSON for better error messages
+        let errorDetails = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorDetails = errorJson.error?.message || errorJson.message || errorText;
+        } catch (e) {
+          // Keep original error text if not JSON
+        }
+        
+        return res.status(response.status).json({ 
+          message: `LLM API Error: ${response.status} ${response.statusText}`,
+          details: errorDetails,
+          endpoint: config.endpoint
+        });
+      }
+
+      const data = await response.json();
+      console.log('LLM API success, response keys:', Object.keys(data));
+      res.json(data);
+    } catch (error) {
+      console.error('Chat API error:', error);
+      res.status(500).json({ 
+        message: "Failed to process chat request",
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
