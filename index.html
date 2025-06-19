@@ -178,6 +178,20 @@
             cursor: pointer;
         }
 
+        .cors-warning {
+            background: #fbbf24;
+            color: #000;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            display: none;
+        }
+
+        .cors-warning.show {
+            display: block;
+        }
+
         .chat-container {
             flex: 1;
             display: flex;
@@ -469,6 +483,28 @@
         .hidden {
             display: none;
         }
+
+        .proxy-options {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .proxy-btn {
+            padding: 5px 10px;
+            background: #4b5563;
+            color: #e4e4e7;
+            border: none;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .proxy-btn:hover {
+            background: #6b7280;
+        }
     </style>
 </head>
 <body>
@@ -484,6 +520,10 @@
 
     <div class="main-content">
         <div class="header">
+            <div class="cors-warning" id="corsWarning">
+                ⚠️ Обнаружена ошибка CORS. Включите использование CORS-прокси или используйте локальный сервер.
+            </div>
+            
             <div class="config-row">
                 <div class="config-field">
                     <label>Endpoint (API URL)</label>
@@ -529,14 +569,20 @@
                 </div>
                 <button class="clear-chat-btn" onclick="clearChat()">Очистить чат</button>
             </div>
-            <!-- NEW: CORS Proxy Settings -->
+            <!-- CORS Proxy Settings -->
             <div class="config-row">
                 <div class="config-field" style="flex: 3;">
-                    <label for="corsProxyUrl">CORS Proxy URL (если API недоступно)</label>
-                    <input type="text" id="corsProxyUrl" onchange="saveConfiguration()">
+                    <label for="corsProxyUrl">CORS Proxy URL</label>
+                    <input type="text" id="corsProxyUrl" onchange="saveConfiguration()" placeholder="https://api.allorigins.win/raw?url=">
+                    <div class="proxy-options">
+                        <button class="proxy-btn" onclick="setProxy('https://api.allorigins.win/raw?url=')">AllOrigins</button>
+                        <button class="proxy-btn" onclick="setProxy('https://cors-anywhere.herokuapp.com/')">CORS Anywhere</button>
+                        <button class="proxy-btn" onclick="setProxy('https://thingproxy.freeboard.io/fetch/')">ThingProxy</button>
+                        <button class="proxy-btn" onclick="setProxy('https://proxy.cors.sh/')">CORS.sh</button>
+                    </div>
                 </div>
                 <div class="config-field" style="display: flex; align-items: flex-end; justify-content: flex-start; padding-bottom: 5px; max-width: 120px;">
-                     <input type="checkbox" id="useCorsProxy" onchange="saveConfiguration()">
+                     <input type="checkbox" id="useCorsProxy" onchange="saveConfiguration()" checked>
                      <label for="useCorsProxy" style="margin-left: 8px;">Использовать</label>
                 </div>
             </div>
@@ -576,7 +622,7 @@
                 </div>
                 <div class="form-group">
                     <label for="promptContent">Промпт</label>
-                    <textarea id="promptContent" placeholder="Сначала заполните конфигурацию" required></textarea>
+                    <textarea id="promptContent" placeholder="Введите системный промпт" required></textarea>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Отмена</button>
@@ -600,6 +646,12 @@
             loadConfiguration();
             renderPromptList();
             renderChatMessages();
+            
+            // Проверить, работает ли в GitHub Pages
+            if (window.location.hostname.includes('github.io')) {
+                document.getElementById('useCorsProxy').checked = true;
+                saveConfiguration();
+            }
         });
 
         // Работа с системными промптами
@@ -725,6 +777,13 @@
             closePromptModal();
         });
 
+        // Функция для быстрого выбора прокси
+        function setProxy(url) {
+            document.getElementById('corsProxyUrl').value = url;
+            document.getElementById('useCorsProxy').checked = true;
+            saveConfiguration();
+        }
+
         // Конфигурация API
         function updateEndpoint() {
             const provider = document.getElementById('provider').value;
@@ -762,14 +821,14 @@
                 document.getElementById('token').value = parsed.token || '';
                 document.getElementById('model').value = parsed.model || 'gpt-4';
                 document.getElementById('provider').value = parsed.provider || 'openai';
-                document.getElementById('corsProxyUrl').value = parsed.corsProxyUrl || 'https://proxy.cors.sh/';
-                document.getElementById('useCorsProxy').checked = parsed.useCorsProxy === true;
+                document.getElementById('corsProxyUrl').value = parsed.corsProxyUrl || 'https://api.allorigins.win/raw?url=';
+                document.getElementById('useCorsProxy').checked = parsed.useCorsProxy !== false; // По умолчанию true
             } else {
                 // Устанавливаем значения по умолчанию при первом запуске
                 document.getElementById('provider').value = 'openai';
                 document.getElementById('model').value = 'gpt-4';
-                document.getElementById('corsProxyUrl').value = 'https://proxy.cors.sh/';
-                document.getElementById('useCorsProxy').checked = true; // Включено по умолчанию
+                document.getElementById('corsProxyUrl').value = 'https://api.allorigins.win/raw?url=';
+                document.getElementById('useCorsProxy').checked = true;
                 updateEndpoint();
             }
         }
@@ -849,178 +908,4 @@
             loadingDiv.id = 'loadingMessage';
             loadingDiv.innerHTML = `
                 <div class="loading-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-                <span>Генерирую ответ...</span>
-            `;
-            container.appendChild(loadingDiv);
-            scrollToBottom();
-        }
-
-        function hideLoadingMessage() {
-            const loading = document.getElementById('loadingMessage');
-            if (loading) {
-                loading.remove();
-            }
-        }
-
-        function scrollToBottom() {
-            const container = document.getElementById('chatMessages');
-            container.scrollTop = container.scrollHeight;
-        }
-
-        async function sendMessage() {
-            if (isLoading) return;
-
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-
-            const endpoint = document.getElementById('endpoint').value;
-            const token = document.getElementById('token').value;
-            const model = document.getElementById('model').value;
-            
-            if (!endpoint || !token) {
-                alert('Пожалуйста, заполните Endpoint и Token');
-                return;
-            }
-
-            addMessage('user', message);
-            input.value = '';
-            autoResizeTextarea(input);
-
-            isLoading = true;
-            document.getElementById('sendBtn').disabled = true;
-            showLoadingMessage();
-
-            try {
-                const activePrompt = systemPrompts.find(p => p.id === activePromptId);
-                const systemMessage = activePrompt ? activePrompt.content : '';
-
-                const response = await callAPI(endpoint, token, model, message, systemMessage);
                 
-                hideLoadingMessage();
-                addMessage('assistant', response);
-            } catch (error) {
-                hideLoadingMessage();
-                addMessage('assistant', `Ошибка: ${error.message}`);
-            } finally {
-                isLoading = false;
-                document.getElementById('sendBtn').disabled = false;
-            }
-        }
-
-        async function callAPI(endpoint, token, model, userMessage, systemMessage) {
-            const provider = document.getElementById('provider').value;
-            
-            // NEW: Logic to prepend proxy
-            const useProxy = document.getElementById('useCorsProxy').checked;
-            const proxyUrl = document.getElementById('corsProxyUrl').value.trim();
-            let finalEndpoint = endpoint;
-
-            if (useProxy && proxyUrl) {
-                // Ensure proxyUrl ends with a slash for proper concatenation
-                const formattedProxyUrl = proxyUrl.endsWith('/') ? proxyUrl : `${proxyUrl}/`;
-                finalEndpoint = formattedProxyUrl + endpoint;
-            }
-
-            try {
-                let requestBody;
-                let headers = {
-                    'Content-Type': 'application/json'
-                };
-
-                if (provider === 'openai' || provider === 'azure' || provider === 'custom') {
-                    headers['Authorization'] = `Bearer ${token}`;
-                    requestBody = {
-                        model: model,
-                        messages: [
-                            ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
-                            ...chatHistory, // Send chat history
-                            { role: 'user', content: userMessage }
-                        ],
-                        temperature: 0.7
-                    };
-                } else if (provider === 'google') {
-                    // Google API expects a different header and body structure
-                    finalEndpoint = finalEndpoint.includes('?key=') ? finalEndpoint : `${finalEndpoint}?key=${token}`;
-                    const historyForGoogle = chatHistory.map(msg => ({
-                        role: msg.role === 'assistant' ? 'model' : 'user',
-                        parts: [{text: msg.content}]
-                    }));
-
-                    requestBody = {
-                        contents: [
-                            ...historyForGoogle,
-                            { role: 'user', parts: [{ text: (systemMessage ? systemMessage + '\n\n' : '') + userMessage }] }
-                        ],
-                        generationConfig: {
-                            temperature: 0.7
-                        }
-                    };
-                }
-                
-                const response = await fetch(finalEndpoint, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify(requestBody),
-                    mode: 'cors'
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
-                }
-
-                const data = await response.json();
-
-                if (provider === 'google') {
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Нет ответа от API';
-                } else {
-                    return data.choices?.[0]?.message?.content || 'Нет ответа от API';
-                }
-
-            } catch (error) {
-                console.error('API Error:', error);
-                
-                if (error.message.includes('Failed to fetch')) {
-                    throw new Error(`Ошибка сети: Не удалось выполнить запрос.\n\nВозможные причины:\n1. Проверьте подключение к интернету.\n2. Убедитесь, что URL Endpoint и CORS Proxy верны.\n3. CORS Proxy может быть временно недоступен или блокировать запросы. Попробуйте другой, например https://cors.eu.org/\n4. API может быть заблокировано в вашей сети.`);
-                }
-                
-                throw error;
-            }
-        }
-
-        function clearChat() {
-            if (confirm('Очистить историю чата?')) {
-                chatHistory = [];
-                saveChatHistory();
-                renderChatMessages();
-            }
-        }
-
-        // Обработка ввода
-        function handleInputKeydown(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        }
-
-        function autoResizeTextarea(textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-        }
-
-        // Закрытие модальных окон по клику вне их
-        document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('modal')) {
-                e.target.classList.add('hidden');
-            }
-        });
-    </script>
-</body>
-</html>
