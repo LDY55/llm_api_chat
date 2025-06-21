@@ -137,9 +137,9 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
   };
 
   return (
-    <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-slate-200">
-        <h3 className="text-lg font-semibold text-slate-800 mb-3">Системные промпты</h3>
+    <div className="w-80 bg-card border-r border-border flex flex-col overflow-hidden">
+      <div className="p-4 border-b border-border">
+        <h3 className="text-lg font-semibold text-foreground mb-3">Системные промпты</h3>
         
         <div className="space-y-3">
           <Input
@@ -155,7 +155,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
             onChange={(e) => setNewPromptContent(e.target.value)}
             className="text-sm resize-none"
           />
-          <Button 
+          <Button
             onClick={handleAddPrompt}
             disabled={addPromptMutation.isPending}
             className="w-full bg-primary hover:bg-blue-700 text-sm"
@@ -170,9 +170,11 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
           {prompts.map((prompt) => (
             <div
               key={prompt.id}
-              className={`p-3 border rounded-lg hover:border-slate-300 transition-colors cursor-pointer ${
-                activePrompt?.id === prompt.id ? 'border-primary bg-blue-50' : 'border-slate-200'
-              }`}
+              className={`p-3 border rounded-lg transition-colors cursor-pointer ${
+                activePrompt?.id === prompt.id
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20'
+                  : 'border-border'
+              } hover:border-primary`}
               onClick={() => onSelectPrompt(prompt)}
             >
               {editingId === prompt.id ? (
@@ -192,7 +194,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleUpdatePrompt();
@@ -204,7 +206,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingId(null);
@@ -218,10 +220,10 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
               ) : (
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-slate-800 truncate">
+                    <h4 className="text-sm font-medium text-foreground truncate">
                       {prompt.name}
                     </h4>
-                    <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                       {prompt.content}
                     </p>
                   </div>
@@ -229,7 +231,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectPrompt(prompt);
@@ -241,7 +243,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-slate-700"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         startEditing(prompt);
@@ -253,7 +255,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeletePrompt(prompt.id);
@@ -271,9 +273,9 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
         </div>
       </div>
       
-      <div className="p-4 border-t border-slate-200 bg-slate-50">
-        <div className="text-xs text-slate-500 mb-1">Активный промпт:</div>
-        <div className="text-sm font-medium text-slate-700">
+      <div className="p-4 border-t border-border bg-muted">
+        <div className="text-xs text-muted-foreground mb-1">Активный промпт:</div>
+        <div className="text-sm font-medium text-foreground">
           {activePrompt ? activePrompt.name : "Не выбран"}
         </div>
       </div>

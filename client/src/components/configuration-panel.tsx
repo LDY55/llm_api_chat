@@ -142,17 +142,17 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   };
 
   return (
-    <div className="bg-white border-b border-slate-200 shadow-sm transition-all duration-300">
+    <div className="bg-card border-b border-border shadow-sm transition-all duration-300">
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-800">Конфигурация API</h2>
+          <h2 className="text-lg font-semibold text-foreground">Конфигурация API</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Button
               variant="ghost"
               size="sm"
               onClick={onToggle}
-              className="text-slate-500 hover:text-slate-700"
+              className="text-muted-foreground hover:text-foreground"
             >
               {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
             </Button>
@@ -162,7 +162,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
         {expanded && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex flex-col gap-2">
-              <Label className="text-sm font-medium text-slate-700">
+              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Сохраненные конфиги
               </Label>
               <Select
@@ -203,7 +203,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
             </div>
 
             <div className="md:col-span-2 flex flex-col gap-2">
-              <Label htmlFor="name" className="text-sm font-medium text-slate-700">
+              <Label htmlFor="name" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Название
               </Label>
               <Input
@@ -216,7 +216,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
             </div>
 
             <div>
-              <Label htmlFor="token" className="text-sm font-medium text-slate-700 mb-2">
+              <Label htmlFor="token" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
                 API Токен
               </Label>
               <Input
@@ -230,7 +230,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
             </div>
 
             <div>
-              <Label htmlFor="model" className="text-sm font-medium text-slate-700 mb-2">
+              <Label htmlFor="model" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
                 Модель
               </Label>
               <Input
@@ -241,7 +241,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 onChange={(e) => setModel(e.target.value)}
                 className="mt-2"
               />
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-muted-foreground">
                 Примеры:
                 <br />• OpenAI: gpt-4, gpt-3.5-turbo
                 <br />• NVIDIA: meta/llama3-70b-instruct
@@ -250,7 +250,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
             </div>
 
             <div>
-              <Label htmlFor="endpoint" className="text-sm font-medium text-slate-700 mb-2">
+              <Label htmlFor="endpoint" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
                 Эндпоинт API
               </Label>
               <Input
@@ -261,7 +261,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 onChange={(e) => setEndpoint(e.target.value)}
                 className="mt-2"
               />
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-muted-foreground">
                 Примеры:
                 <br />• OpenAI: https://api.openai.com/v1/chat/completions
                 <br />• NVIDIA: https://integrate.api.nvidia.com/v1/chat/completions
@@ -277,7 +277,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
               onClick={() => testConfigMutation.mutate()}
               disabled={testConfigMutation.isPending || !config}
               variant="outline"
-              className="border-primary text-primary hover:bg-blue-50"
+              className="border-primary text-primary hover:bg-primary/10 dark:hover:bg-primary/20"
             >
               {testConfigMutation.isPending ? "Тестирование..." : "Тестировать API"}
             </Button>

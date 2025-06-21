@@ -189,10 +189,10 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
               className={`max-w-3xl px-4 py-3 rounded-2xl ${
                 message.role === "user"
                   ? "bg-primary text-white rounded-br-md"
-                  : "bg-white border border-slate-200 rounded-bl-md shadow-sm"
+                  : "bg-card border border-border rounded-bl-md shadow-sm"
               }`}
             >
-              <div className={`text-sm ${message.role === "user" ? "text-white" : "text-slate-800"}`}>
+              <div className={`text-sm ${message.role === "user" ? "text-white" : "text-foreground"}`}>
                 {message.role === "user" ? (
                   message.content
                 ) : (
@@ -202,7 +202,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
                 )}
               </div>
               <div className={`text-xs mt-2 ${
-                message.role === "user" ? "opacity-75" : "text-slate-500"
+                message.role === "user" ? "opacity-75" : "text-muted-foreground"
               }`}>
                 {message.timestamp 
                   ? new Date(message.timestamp).toLocaleTimeString("ru-RU", {
@@ -218,10 +218,10 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
 
         {isLoading && (
           <div className="message flex justify-start">
-            <div className="max-w-3xl bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+            <div className="max-w-3xl bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
               <div className="flex items-center space-x-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span className="text-sm text-slate-600">Печатает...</span>
+                <span className="text-sm text-muted-foreground">Печатает...</span>
               </div>
             </div>
           </div>
@@ -230,7 +230,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-slate-200 p-4 bg-white">
+      <div className="border-t border-border p-4 bg-card">
         <div className="flex space-x-3">
           <div className="flex-1">
             <Textarea
@@ -255,7 +255,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
               onClick={handleClearChat}
               disabled={clearMessagesMutation.isPending}
               variant="secondary"
-              className="px-6 py-3 bg-slate-500 hover:bg-slate-600 text-white"
+              className="px-6 py-3 bg-slate-500 hover:bg-slate-600 text-white dark:bg-slate-700"
               title="Очистить чат"
             >
               <Trash2 className="w-5 h-5" />
@@ -263,7 +263,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
           </div>
         </div>
 
-        <div className="flex justify-between items-center mt-3 text-xs text-slate-500">
+        <div className="flex justify-between items-center mt-3 text-xs text-muted-foreground">
           <div>
             {isLoading ? "Отправка сообщения..." : "Готов к отправке"}
           </div>
