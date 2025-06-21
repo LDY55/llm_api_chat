@@ -198,7 +198,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
               </Select>
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <Label htmlFor="name" className="text-sm font-medium text-slate-700 mb-2">
                 Название
               </Label>
@@ -210,6 +210,40 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 onChange={(e) => setName(e.target.value)}
                 className="mt-2"
               />
+            </div>
+
+            <div>
+              <Label htmlFor="token" className="text-sm font-medium text-slate-700 mb-2">
+                API Токен
+              </Label>
+              <Input
+                id="token"
+                type="password"
+                placeholder="sk-..."
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="model" className="text-sm font-medium text-slate-700 mb-2">
+                Модель
+              </Label>
+              <Input
+                id="model"
+                type="text"
+                placeholder="gpt-3.5-turbo"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="mt-2"
+              />
+              <div className="mt-1 text-xs text-slate-500">
+                Примеры:
+                <br />• OpenAI: gpt-4, gpt-3.5-turbo
+                <br />• NVIDIA: meta/llama3-70b-instruct
+                <br />• Anthropic: claude-3-sonnet-20240229
+              </div>
             </div>
 
             <div>
@@ -229,40 +263,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 <br />• OpenAI: https://api.openai.com/v1/chat/completions
                 <br />• NVIDIA: https://integrate.api.nvidia.com/v1/chat/completions
                 <br />• Anthropic: https://api.anthropic.com/v1/messages
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="token" className="text-sm font-medium text-slate-700 mb-2">
-                API Токен
-              </Label>
-              <Input
-                id="token"
-                type="password"
-                placeholder="sk-..."
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                className="mt-2"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="model" className="text-sm font-medium text-slate-700 mb-2">
-                Модель
-              </Label>
-              <Input
-                id="model"
-                type="text"
-                placeholder="gpt-3.5-turbo"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-2"
-              />
-              <div className="mt-1 text-xs text-slate-500">
-                Примеры:
-                <br />• OpenAI: gpt-4, gpt-3.5-turbo
-                <br />• NVIDIA: meta/llama3-70b-instruct
-                <br />• Anthropic: claude-3-sonnet-20240229
               </div>
             </div>
           </div>
