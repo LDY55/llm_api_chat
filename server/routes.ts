@@ -24,6 +24,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/prompts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertSystemPromptSchema.parse(req.body);
+      const updated = await storage.updateSystemPrompt(id, validatedData);
+      if (!updated) {
+        return res.status(404).json({ message: "Prompt not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid prompt data" });
+    }
+  });
+
   app.delete("/api/prompts/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);

@@ -157,8 +157,8 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
         
         {expanded && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label className="text-sm font-medium text-slate-700 mb-2">
+            <div className="flex flex-col gap-2">
+              <Label className="text-sm font-medium text-slate-700">
                 Сохраненные конфиги
               </Label>
               <Select
@@ -198,8 +198,8 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
               </Select>
             </div>
 
-            <div className="md:col-span-2">
-              <Label htmlFor="name" className="text-sm font-medium text-slate-700 mb-2">
+            <div className="md:col-span-2 flex flex-col gap-2">
+              <Label htmlFor="name" className="text-sm font-medium text-slate-700">
                 Название
               </Label>
               <Input
@@ -208,7 +208,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 placeholder="OpenAI"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-2"
               />
             </div>
 

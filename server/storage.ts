@@ -164,6 +164,14 @@ export class MemStorage implements IStorage {
     return this.systemPrompts.delete(id);
   }
 
+  async updateSystemPrompt(id: number, data: InsertSystemPrompt): Promise<SystemPrompt | undefined> {
+    const existing = this.systemPrompts.get(id);
+    if (!existing) return undefined;
+    const updated: SystemPrompt = { ...existing, ...data };
+    this.systemPrompts.set(id, updated);
+    return updated;
+  }
+
   async getAllChatMessages(): Promise<ChatMessage[]> {
     return Array.from(this.chatMessages.values()).sort((a, b) => 
       a.timestamp!.getTime() - b.timestamp!.getTime()

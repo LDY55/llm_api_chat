@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, Trash2 } from "lucide-react";
+import { Check, Trash2, Pen, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,9 @@ interface SystemPromptsSidebarProps {
 export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: SystemPromptsSidebarProps) {
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptContent, setNewPromptContent] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editContent, setEditContent] = useState("");
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,6 +66,24 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
     },
   });
 
+  const updatePromptMutation = useMutation({
+    mutationFn: async (data: { id: number; name: string; content: string }) => {
+      return apiRequest("PUT", `/api/prompts/${data.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prompts"] });
+      setEditingId(null);
+      toast({ title: "Промпт обновлен" });
+    },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить промпт",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleAddPrompt = () => {
     if (!newPromptName.trim() || !newPromptContent.trim()) {
       toast({
@@ -91,6 +112,28 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
         }
       }
     }
+  };
+
+  const startEditing = (prompt: SystemPrompt) => {
+    setEditingId(prompt.id);
+    setEditName(prompt.name);
+    setEditContent(prompt.content);
+  };
+
+  const handleUpdatePrompt = () => {
+    if (editingId === null) return;
+    if (!editName.trim() || !editContent.trim()) {
+      toast({
+        title: "Заполните все поля",
+        variant: "destructive",
+      });
+      return;
+    }
+    updatePromptMutation.mutate({
+      id: editingId,
+      name: editName.trim(),
+      content: editContent.trim(),
+    });
   };
 
   return (
@@ -132,43 +175,97 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
               }`}
               onClick={() => onSelectPrompt(prompt)}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-medium text-slate-800 truncate">
-                    {prompt.name}
-                  </h4>
-                  <p className="text-xs text-slate-600 mt-1 line-clamp-2">
-                    {prompt.content}
-                  </p>
+              {editingId === prompt.id ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="text-sm"
+                  />
+                  <Textarea
+                    rows={3}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="text-sm resize-none"
+                  />
+                  <div className="flex justify-end space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUpdatePrompt();
+                      }}
+                      title="Сохранить"
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(null);
+                      }}
+                      title="Отмена"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex space-x-1 ml-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectPrompt(prompt);
-                    }}
-                    title="Выбрать"
-                  >
-                    <Check className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeletePrompt(prompt.id);
-                    }}
-                    title="Удалить"
-                    disabled={deletePromptMutation.isPending}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium text-slate-800 truncate">
+                      {prompt.name}
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                      {prompt.content}
+                    </p>
+                  </div>
+                  <div className="flex space-x-1 ml-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectPrompt(prompt);
+                      }}
+                      title="Выбрать"
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-slate-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditing(prompt);
+                      }}
+                      title="Редактировать"
+                    >
+                      <Pen className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePrompt(prompt.id);
+                      }}
+                      title="Удалить"
+                      disabled={deletePromptMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ))}
         </div>
