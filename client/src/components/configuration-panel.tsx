@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { ApiConfiguration } from "@shared/schema";
 
 interface ConfigurationPanelProps {
@@ -145,14 +146,17 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-800">Конфигурация API</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggle}
-            className="text-slate-500 hover:text-slate-700"
-          >
-            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggle}
+              className="text-slate-500 hover:text-slate-700"
+            >
+              {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </Button>
+          </div>
         </div>
         
         {expanded && (
