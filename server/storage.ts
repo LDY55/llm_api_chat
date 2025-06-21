@@ -1,10 +1,14 @@
-import { 
+import {
   users, systemPrompts, chatMessages, apiConfigurations,
   type User, type InsertUser,
   type SystemPrompt, type InsertSystemPrompt,
   type ChatMessage, type InsertChatMessage,
   type ApiConfiguration, type InsertApiConfiguration
 } from "@shared/schema";
+import fs from "node:fs";
+import path from "node:path";
+
+const CONFIG_FILE = path.join(process.cwd(), "api-config.json");
 
 export interface IStorage {
   // Users
@@ -37,6 +41,19 @@ export class MemStorage implements IStorage {
   private currentPromptId: number;
   private currentMessageId: number;
   private currentConfigId: number;
+  private loadConfigFromFile(): void {
+    try {
+      if (fs.existsSync(CONFIG_FILE)) {
+        const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+        const data = JSON.parse(raw) as Omit<ApiConfiguration, "id"> & { id?: number };
+        const id = data.id ?? this.currentConfigId++;
+        this.apiConfiguration = { ...data, id };
+        this.currentConfigId = id + 1;
+      }
+    } catch (err) {
+      console.error("Failed to load API configuration", err);
+    }
+  }
 
   constructor() {
     this.users = new Map();
@@ -50,6 +67,9 @@ export class MemStorage implements IStorage {
 
     // Initialize with default prompts
     this.initializeDefaultPrompts();
+
+    // Load persisted API configuration if available
+    this.loadConfigFromFile();
   }
 
   private initializeDefaultPrompts() {
@@ -148,12 +168,19 @@ export class MemStorage implements IStorage {
   }
 
   async saveApiConfiguration(insertConfig: InsertApiConfiguration): Promise<ApiConfiguration> {
-    const id = this.currentConfigId++;
+    const id = this.apiConfiguration?.id ?? this.currentConfigId++;
     const config: ApiConfiguration = {
       ...insertConfig,
-      id
+      id,
     };
     this.apiConfiguration = config;
+
+    try {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf8");
+    } catch (err) {
+      console.error("Failed to save API configuration", err);
+    }
+
     return config;
   }
 }
