@@ -24,6 +24,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/prompts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertSystemPromptSchema.parse(req.body);
+      const updated = await storage.updateSystemPrompt(id, validatedData);
+      if (!updated) {
+        return res.status(404).json({ message: "Prompt not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid prompt data" });
+    }
+  });
+
   app.delete("/api/prompts/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -77,13 +91,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/configs", async (_req, res) => {
+    try {
+      const configs = await storage.getAllApiConfigurations();
+      const active = await storage.getApiConfiguration();
+      res.json({ configs, activeId: active?.id ?? null });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch configurations" });
+    }
+  });
+
   app.post("/api/config", async (req, res) => {
     try {
       const validatedData = insertApiConfigurationSchema.parse(req.body);
-      const config = await storage.saveApiConfiguration(validatedData);
+      const id = req.body.id ? Number(req.body.id) : undefined;
+      const config = await storage.saveApiConfiguration({ ...validatedData, id });
       res.json(config);
     } catch (error) {
       res.status(400).json({ message: "Invalid configuration data" });
+    }
+  });
+
+  app.post("/api/configs/:id/activate", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const cfg = await storage.setActiveApiConfiguration(id);
+      if (!cfg) {
+        return res.status(404).json({ message: "Configuration not found" });
+      }
+      res.json(cfg);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to activate configuration" });
+    }
+  });
+
+  app.delete("/api/configs/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteApiConfiguration(id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Configuration not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete configuration" });
     }
   });
 
