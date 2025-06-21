@@ -24,6 +24,7 @@ export const chatMessages = pgTable("chat_messages", {
 
 export const apiConfigurations = pgTable("api_configurations", {
   id: serial("id").primaryKey(),
+  name: text("name").notNull(),
   endpoint: text("endpoint").notNull(),
   token: text("token").notNull(),
   model: text("model").notNull(),

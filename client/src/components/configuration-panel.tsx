@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ApiConfiguration } from "@shared/schema";
@@ -15,6 +22,12 @@ interface ConfigurationPanelProps {
 }
 
 export function ConfigurationPanel({ expanded, onToggle, config }: ConfigurationPanelProps) {
+  const { data: configList } = useQuery<{ configs: ApiConfiguration[]; activeId: number | null }>({
+    queryKey: ["/api/configs"],
+  });
+
+  const [selectedId, setSelectedId] = useState<number | undefined>(config?.id);
+  const [name, setName] = useState(config?.name || "");
   const [endpoint, setEndpoint] = useState(config?.endpoint || "");
   const [token, setToken] = useState(config?.token || "");
   const [model, setModel] = useState(config?.model || "");
@@ -22,21 +35,26 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Update form when config changes
-  useState(() => {
+  // Update form when active config changes
+  useEffect(() => {
     if (config) {
+      setSelectedId(config.id);
+      setName(config.name);
       setEndpoint(config.endpoint);
       setToken(config.token);
       setModel(config.model);
     }
-  });
+  }, [config]);
 
   const saveConfigMutation = useMutation({
-    mutationFn: async (configData: { endpoint: string; token: string; model: string }) => {
+    mutationFn: async (
+      configData: { id?: number; name: string; endpoint: string; token: string; model: string },
+    ) => {
       return apiRequest("POST", "/api/config", configData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
       toast({
         title: "Конфигурация сохранена",
         description: "API настройки успешно обновлены",
@@ -79,8 +97,32 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
     },
   });
 
+  const activateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("POST", `/api/configs/${id}/activate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+    },
+  });
+
+  const deleteConfigMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/configs/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      toast({ title: "Конфигурация удалена" });
+    },
+    onError: () => {
+      toast({ title: "Не удалось удалить конфигурацию", variant: "destructive" });
+    },
+  });
+
   const handleSave = () => {
-    if (!endpoint.trim() || !token.trim() || !model.trim()) {
+    if (!name.trim() || !endpoint.trim() || !token.trim() || !model.trim()) {
       toast({
         title: "Заполните все поля",
         description: "Все поля конфигурации обязательны для заполнения",
@@ -90,6 +132,8 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
     }
 
     saveConfigMutation.mutate({
+      id: selectedId,
+      name: name.trim(),
       endpoint: endpoint.trim(),
       token: token.trim(),
       model: model.trim(),
@@ -113,6 +157,61 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
         
         {expanded && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label className="text-sm font-medium text-slate-700 mb-2">
+                Сохраненные конфиги
+              </Label>
+              <Select
+                value={selectedId ? String(selectedId) : "new"}
+                onValueChange={(val) => {
+                  if (val === "new") {
+                    setSelectedId(undefined);
+                    setName("");
+                    setEndpoint("");
+                    setToken("");
+                    setModel("");
+                  } else {
+                    const id = parseInt(val);
+                    setSelectedId(id);
+                    const cfg = configList?.configs.find((c) => c.id === id);
+                    if (cfg) {
+                      setName(cfg.name);
+                      setEndpoint(cfg.endpoint);
+                      setToken(cfg.token);
+                      setModel(cfg.model);
+                      activateMutation.mutate(id);
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите конфиг" />
+                </SelectTrigger>
+                <SelectContent>
+                  {configList?.configs.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="new">Новый…</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="name" className="text-sm font-medium text-slate-700 mb-2">
+                Название
+              </Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="OpenAI"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+
             <div>
               <Label htmlFor="endpoint" className="text-sm font-medium text-slate-700 mb-2">
                 Эндпоинт API
@@ -171,7 +270,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
         
         {expanded && (
           <div className="mt-4 flex justify-end space-x-3">
-            <Button 
+            <Button
               onClick={() => testConfigMutation.mutate()}
               disabled={testConfigMutation.isPending || !config}
               variant="outline"
@@ -179,7 +278,16 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
             >
               {testConfigMutation.isPending ? "Тестирование..." : "Тестировать API"}
             </Button>
-            <Button 
+            {selectedId && (
+              <Button
+                onClick={() => deleteConfigMutation.mutate(selectedId)}
+                variant="destructive"
+                disabled={deleteConfigMutation.isPending}
+              >
+                Удалить
+              </Button>
+            )}
+            <Button
               onClick={handleSave}
               disabled={saveConfigMutation.isPending}
               className="bg-primary hover:bg-blue-700"

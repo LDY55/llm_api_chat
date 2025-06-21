@@ -28,15 +28,19 @@ export interface IStorage {
   clearChatMessages(): Promise<void>;
 
   // API Configuration
-  getApiConfiguration(): Promise<ApiConfiguration | undefined>;
-  saveApiConfiguration(config: InsertApiConfiguration): Promise<ApiConfiguration>;
+  getApiConfiguration(id?: number): Promise<ApiConfiguration | undefined>;
+  getAllApiConfigurations(): Promise<ApiConfiguration[]>;
+  saveApiConfiguration(config: InsertApiConfiguration & { id?: number }): Promise<ApiConfiguration>;
+  deleteApiConfiguration(id: number): Promise<boolean>;
+  setActiveApiConfiguration(id: number): Promise<ApiConfiguration | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private systemPrompts: Map<number, SystemPrompt>;
   private chatMessages: Map<number, ChatMessage>;
-  private apiConfiguration: ApiConfiguration | undefined;
+  private apiConfigurations: Map<number, ApiConfiguration>;
+  private activeConfigId: number | undefined;
   private currentUserId: number;
   private currentPromptId: number;
   private currentMessageId: number;
@@ -45,13 +49,30 @@ export class MemStorage implements IStorage {
     try {
       if (fs.existsSync(CONFIG_FILE)) {
         const raw = fs.readFileSync(CONFIG_FILE, "utf8");
-        const data = JSON.parse(raw) as Omit<ApiConfiguration, "id"> & { id?: number };
-        const id = data.id ?? this.currentConfigId++;
-        this.apiConfiguration = { ...data, id };
-        this.currentConfigId = id + 1;
+        const data = JSON.parse(raw) as {
+          activeId?: number;
+          configs?: ApiConfiguration[];
+        };
+        const configs = data.configs ?? [];
+        this.apiConfigurations = new Map(configs.map((c) => [c.id!, c]));
+        const maxId = configs.reduce((m, c) => Math.max(m, c.id ?? 0), 0);
+        this.currentConfigId = maxId + 1;
+        this.activeConfigId = data.activeId;
       }
     } catch (err) {
-      console.error("Failed to load API configuration", err);
+      console.error("Failed to load API configurations", err);
+    }
+  }
+
+  private persistConfigsToFile(): void {
+    try {
+      const payload = {
+        activeId: this.activeConfigId,
+        configs: Array.from(this.apiConfigurations.values()),
+      };
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(payload, null, 2), "utf8");
+    } catch (err) {
+      console.error("Failed to save API configurations", err);
     }
   }
 
@@ -59,7 +80,8 @@ export class MemStorage implements IStorage {
     this.users = new Map();
     this.systemPrompts = new Map();
     this.chatMessages = new Map();
-    this.apiConfiguration = undefined;
+    this.apiConfigurations = new Map();
+    this.activeConfigId = undefined;
     this.currentUserId = 1;
     this.currentPromptId = 1;
     this.currentMessageId = 1;
@@ -163,25 +185,55 @@ export class MemStorage implements IStorage {
     this.chatMessages.clear();
   }
 
-  async getApiConfiguration(): Promise<ApiConfiguration | undefined> {
-    return this.apiConfiguration;
+  async getApiConfiguration(id?: number): Promise<ApiConfiguration | undefined> {
+    if (typeof id === "number") {
+      return this.apiConfigurations.get(id);
+    }
+    if (this.activeConfigId !== undefined) {
+      return this.apiConfigurations.get(this.activeConfigId);
+    }
+    return undefined;
   }
 
-  async saveApiConfiguration(insertConfig: InsertApiConfiguration): Promise<ApiConfiguration> {
-    const id = this.apiConfiguration?.id ?? this.currentConfigId++;
+  async getAllApiConfigurations(): Promise<ApiConfiguration[]> {
+    return Array.from(this.apiConfigurations.values());
+  }
+
+  async saveApiConfiguration(
+    insertConfig: InsertApiConfiguration & { id?: number },
+  ): Promise<ApiConfiguration> {
+    const id = insertConfig.id ?? this.currentConfigId++;
     const config: ApiConfiguration = {
       ...insertConfig,
       id,
     };
-    this.apiConfiguration = config;
-
-    try {
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), "utf8");
-    } catch (err) {
-      console.error("Failed to save API configuration", err);
-    }
-
+    this.apiConfigurations.set(id, config);
+    this.activeConfigId = id;
+    this.persistConfigsToFile();
     return config;
+  }
+
+  async deleteApiConfiguration(id: number): Promise<boolean> {
+    const deleted = this.apiConfigurations.delete(id);
+    if (deleted) {
+      if (this.activeConfigId === id) {
+        const first = this.apiConfigurations.keys().next().value;
+        this.activeConfigId = first !== undefined ? first : undefined;
+      }
+      this.persistConfigsToFile();
+    }
+    return deleted;
+  }
+
+  async setActiveApiConfiguration(
+    id: number,
+  ): Promise<ApiConfiguration | undefined> {
+    const cfg = this.apiConfigurations.get(id);
+    if (cfg) {
+      this.activeConfigId = id;
+      this.persistConfigsToFile();
+    }
+    return cfg;
   }
 }
 
