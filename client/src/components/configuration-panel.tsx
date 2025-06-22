@@ -14,17 +14,21 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { GoogleToggle } from "@/components/google-toggle";
 import type { ApiConfiguration } from "@shared/schema";
 
 interface ConfigurationPanelProps {
   expanded: boolean;
   onToggle: () => void;
   config: ApiConfiguration | null | undefined;
+  useGoogle: boolean;
+  onToggleGoogle: () => void;
 }
 
-export function ConfigurationPanel({ expanded, onToggle, config }: ConfigurationPanelProps) {
+export function ConfigurationPanel({ expanded, onToggle, config, useGoogle, onToggleGoogle }: ConfigurationPanelProps) {
+  const providerParam = useGoogle ? "?provider=google" : "";
   const { data: configList } = useQuery<{ configs: ApiConfiguration[]; activeId: number | null }>({
-    queryKey: ["/api/configs"],
+    queryKey: [`/api/configs${providerParam}`],
   });
 
   const [selectedId, setSelectedId] = useState<number | undefined>(config?.id);
@@ -51,11 +55,11 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
     mutationFn: async (
       configData: { id?: number; name: string; endpoint: string; token: string; model: string },
     ) => {
-      return apiRequest("POST", "/api/config", configData);
+      return apiRequest("POST", `/api/config${providerParam}`, configData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config${providerParam}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs${providerParam}`] });
       toast({
         title: "Конфигурация сохранена",
         description: "API настройки успешно обновлены",
@@ -72,7 +76,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
 
   const testConfigMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/config/test");
+      const response = await apiRequest("POST", `/api/config/test${providerParam}`);
       return response.json();
     },
     onSuccess: (data) => {
@@ -100,21 +104,21 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
 
   const activateMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("POST", `/api/configs/${id}/activate`);
+      return apiRequest("POST", `/api/configs/${id}/activate${providerParam}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config${providerParam}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs${providerParam}`] });
     },
   });
 
   const deleteConfigMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/configs/${id}`);
+      return apiRequest("DELETE", `/api/configs/${id}${providerParam}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config${providerParam}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs${providerParam}`] });
       toast({ title: "Конфигурация удалена" });
     },
     onError: () => {
@@ -123,7 +127,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   });
 
   const handleSave = () => {
-    if (!name.trim() || !endpoint.trim() || !token.trim() || !model.trim()) {
+    if (!name.trim() || (!useGoogle && !endpoint.trim()) || !token.trim() || !model.trim()) {
       toast({
         title: "Заполните все поля",
         description: "Все поля конфигурации обязательны для заполнения",
@@ -148,6 +152,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
           <h2 className="text-lg font-semibold text-foreground">Конфигурация API</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <GoogleToggle checked={useGoogle} onChange={onToggleGoogle} />
             <Button
               variant="ghost"
               size="sm"
@@ -259,6 +264,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 placeholder="https://api.openai.com/v1/chat/completions"
                 value={endpoint}
                 onChange={(e) => setEndpoint(e.target.value)}
+                disabled={useGoogle}
                 className="mt-2"
               />
               <div className="mt-1 text-xs text-muted-foreground">

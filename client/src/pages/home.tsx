@@ -8,6 +8,7 @@ import type { SystemPrompt, ApiConfiguration } from "@shared/schema";
 export default function Home() {
   const [configExpanded, setConfigExpanded] = useState(true);
   const [activePrompt, setActivePrompt] = useState<SystemPrompt | null>(null);
+  const [useGoogle, setUseGoogle] = useState(false);
 
   // Load prompts
   const { data: prompts = [] } = useQuery<SystemPrompt[]>({
@@ -15,8 +16,9 @@ export default function Home() {
   });
 
   // Load configuration
+  const providerQuery = useGoogle ? '?provider=google' : '';
   const { data: config } = useQuery<ApiConfiguration | null>({
-    queryKey: ["/api/config"],
+    queryKey: [`/api/config${providerQuery}`],
   });
 
   // Set first prompt as active by default
@@ -28,22 +30,26 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
-      <ConfigurationPanel 
+      <ConfigurationPanel
         expanded={configExpanded}
         onToggle={() => setConfigExpanded(!configExpanded)}
         config={config}
+        useGoogle={useGoogle}
+        onToggleGoogle={() => setUseGoogle(!useGoogle)}
       />
       
       <div className="flex flex-1 overflow-hidden">
-        <SystemPromptsSidebar 
+        <SystemPromptsSidebar
           prompts={prompts}
           activePrompt={activePrompt}
           onSelectPrompt={setActivePrompt}
+          activeModel={config?.model || null}
         />
         
-        <ChatInterface 
+        <ChatInterface
           activePrompt={activePrompt}
           config={config}
+          useGoogle={useGoogle}
         />
       </div>
     </div>

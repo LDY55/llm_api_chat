@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema } from "@shared/schema";
+import { runGoogleChat } from './googleApiClient';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // System Prompts routes
@@ -84,17 +85,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API Configuration routes
   app.get("/api/config", async (req, res) => {
     try {
-      const config = await storage.getApiConfiguration();
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
+      const config = await storage.getApiConfiguration(undefined, provider);
       res.json(config || null);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch configuration" });
     }
   });
 
-  app.get("/api/configs", async (_req, res) => {
+  app.get("/api/configs", async (req, res) => {
     try {
-      const configs = await storage.getAllApiConfigurations();
-      const active = await storage.getApiConfiguration();
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
+      const configs = await storage.getAllApiConfigurations(provider);
+      const active = await storage.getApiConfiguration(undefined, provider);
       res.json({ configs, activeId: active?.id ?? null });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch configurations" });
@@ -103,9 +106,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/config", async (req, res) => {
     try {
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
       const validatedData = insertApiConfigurationSchema.parse(req.body);
       const id = req.body.id ? Number(req.body.id) : undefined;
-      const config = await storage.saveApiConfiguration({ ...validatedData, id });
+      const config = await storage.saveApiConfiguration({ ...validatedData, id }, provider);
       res.json(config);
     } catch (error) {
       res.status(400).json({ message: "Invalid configuration data" });
@@ -114,8 +118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/configs/:id/activate", async (req, res) => {
     try {
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
       const id = Number(req.params.id);
-      const cfg = await storage.setActiveApiConfiguration(id);
+      const cfg = await storage.setActiveApiConfiguration(id, provider);
       if (!cfg) {
         return res.status(404).json({ message: "Configuration not found" });
       }
@@ -127,8 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/configs/:id", async (req, res) => {
     try {
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
       const id = Number(req.params.id);
-      const deleted = await storage.deleteApiConfiguration(id);
+      const deleted = await storage.deleteApiConfiguration(id, provider);
       if (!deleted) {
         return res.status(404).json({ message: "Configuration not found" });
       }
@@ -141,10 +147,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test API connection
   app.post("/api/config/test", async (req, res) => {
     try {
-      const config = await storage.getApiConfiguration();
-      
+      const provider = req.query.provider === 'google' ? 'google' : undefined;
+      const config = await storage.getApiConfiguration(undefined, provider);
+
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
+      }
+
+      if (provider === 'google') {
+        const text = await runGoogleChat(config.token, config.model, [{ role: 'user', content: 'Hello' }]);
+        return res.json({ success: true, message: 'API connection successful', response: text });
       }
 
       const testMessage = {
@@ -189,15 +201,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LLM API proxy route
   app.post("/api/chat", async (req, res) => {
     try {
-      const { messages, systemPrompt } = req.body;
-      const config = await storage.getApiConfiguration();
+      const { messages, systemPrompt, provider } = req.body;
+      const prov = provider === 'google' ? 'google' : undefined;
+      const config = await storage.getApiConfiguration(undefined, prov);
       
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
       }
 
       // Prepare messages for LLM API
-      const apiMessages = [];
+      const apiMessages = [] as Array<{ role: string; content: string }>;
       
       if (systemPrompt) {
         apiMessages.push({
@@ -220,8 +233,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Sending request to LLM API:', {
         endpoint: config.endpoint,
         model: config.model,
-        messagesCount: apiMessages.length
+        messagesCount: apiMessages.length,
+        provider: prov || 'default'
       });
+
+      if (prov === 'google') {
+        const text = await runGoogleChat(config.token, config.model, apiMessages, systemPrompt);
+        return res.json({ choices: [{ message: { role: 'assistant', content: text } }] });
+      }
 
       // Make request to LLM API
       const response = await fetch(config.endpoint, {

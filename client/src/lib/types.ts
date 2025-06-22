@@ -13,4 +13,5 @@ export interface ChatRequest {
     content: string;
   }>;
   systemPrompt?: string;
+  provider?: 'google';
 }

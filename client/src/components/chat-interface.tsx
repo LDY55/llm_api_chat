@@ -12,9 +12,10 @@ import ReactMarkdown from "react-markdown";
 interface ChatInterfaceProps {
   activePrompt: SystemPrompt | null;
   config: ApiConfiguration | null | undefined;
+  useGoogle: boolean;
 }
 
-export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
+export function ChatInterface({ activePrompt, config, useGoogle }: ChatInterfaceProps) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -152,6 +153,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
     chatMutation.mutate({
       messages: conversationMessages,
       systemPrompt: activePrompt?.content,
+      provider: useGoogle ? 'google' : undefined,
     });
   };
 
@@ -173,7 +175,7 @@ export function ChatInterface({ activePrompt, config }: ChatInterfaceProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const isConfigured = config?.endpoint && config?.token && config?.model;
+  const isConfigured = (useGoogle || config?.endpoint) && config?.token && config?.model;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
