@@ -10,6 +10,7 @@ import path from "node:path";
 
 const DEFAULT_CONFIG_FILE = path.join(process.cwd(), "api-config.json");
 const GOOGLE_CONFIG_FILE = path.join(process.cwd(), "google-api-config.json");
+const PROMPTS_FILE = path.join(process.cwd(), "system-prompts.json");
 
 export interface IStorage {
   // Users
@@ -77,6 +78,34 @@ export class MemStorage implements IStorage {
     }
   }
 
+  private loadPrompts(): void {
+    try {
+      if (fs.existsSync(PROMPTS_FILE)) {
+        const raw = fs.readFileSync(PROMPTS_FILE, "utf8");
+        const data = JSON.parse(raw) as SystemPrompt[];
+        this.systemPrompts = new Map(
+          data.map((p) => [p.id, { ...p, createdAt: p.createdAt ? new Date(p.createdAt) : null }])
+        );
+        const maxId = data.reduce((m, p) => Math.max(m, p.id ?? 0), 0);
+        this.currentPromptId = maxId + 1;
+      }
+    } catch (err) {
+      console.error("Failed to load system prompts", err);
+    }
+  }
+
+  private persistPrompts(): void {
+    try {
+      fs.writeFileSync(
+        PROMPTS_FILE,
+        JSON.stringify(Array.from(this.systemPrompts.values()), null, 2),
+        "utf8"
+      );
+    } catch (err) {
+      console.error("Failed to save system prompts", err);
+    }
+  }
+
   private persistConfigs(useGoogle: boolean): void {
     const file = useGoogle ? GOOGLE_CONFIG_FILE : DEFAULT_CONFIG_FILE;
     const store = this.getStore(useGoogle);
@@ -103,8 +132,12 @@ export class MemStorage implements IStorage {
     this.currentPromptId = 1;
     this.currentMessageId = 1;
 
-    // Initialize with default prompts
-    this.initializeDefaultPrompts();
+    // Load persisted system prompts if available
+    this.loadPrompts();
+    if (this.systemPrompts.size === 0) {
+      this.initializeDefaultPrompts();
+      this.persistPrompts();
+    }
 
     // Load persisted API configurations for both modes
     this.loadConfigs(false);
@@ -174,11 +207,16 @@ export class MemStorage implements IStorage {
       createdAt: new Date()
     };
     this.systemPrompts.set(id, prompt);
+    this.persistPrompts();
     return prompt;
   }
 
   async deleteSystemPrompt(id: number): Promise<boolean> {
-    return this.systemPrompts.delete(id);
+    const deleted = this.systemPrompts.delete(id);
+    if (deleted) {
+      this.persistPrompts();
+    }
+    return deleted;
   }
 
   async updateSystemPrompt(id: number, data: InsertSystemPrompt): Promise<SystemPrompt | undefined> {
@@ -186,6 +224,7 @@ export class MemStorage implements IStorage {
     if (!existing) return undefined;
     const updated: SystemPrompt = { ...existing, ...data };
     this.systemPrompts.set(id, updated);
+    this.persistPrompts();
     return updated;
   }
 
