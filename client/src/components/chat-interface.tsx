@@ -174,6 +174,32 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Reset chat when model, Google mode, or system prompt changes
+  const prevModelRef = useRef<string | null>(null);
+  const prevGoogleRef = useRef<boolean | null>(null);
+  const prevPromptRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const prevModel = prevModelRef.current;
+    const prevGoogle = prevGoogleRef.current;
+    const prevPrompt = prevPromptRef.current;
+
+    const modelChanged =
+      prevModel !== null && config?.model && prevModel !== config.model;
+    const googleChanged =
+      prevGoogle !== null && prevGoogle !== googleMode;
+    const promptChanged =
+      prevPrompt !== null && activePrompt && prevPrompt !== activePrompt.id;
+
+    if (modelChanged || googleChanged || promptChanged) {
+      clearMessagesMutation.mutate();
+    }
+
+    prevModelRef.current = config?.model ?? null;
+    prevGoogleRef.current = googleMode;
+    prevPromptRef.current = activePrompt?.id ?? null;
+  }, [config?.model, googleMode, activePrompt?.id]);
+
   const isConfigured = config?.token && config?.model && (googleMode || config?.endpoint);
 
   return (
