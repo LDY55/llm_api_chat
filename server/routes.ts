@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const ai = new GoogleGenAI({ apiKey: config.token });
         const response = await ai.models.generateContent({
           model: config.model,
-          contents: "Hello",
+          contents: [{ role: "user", parts: [{ text: "Hello" }] }],
         });
         return res.json({
           success: true,
@@ -220,7 +220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Prepare messages for LLM API
       const apiMessages = [] as any[];
-      
+
       if (systemPrompt) {
         apiMessages.push({
           role: 'system',
@@ -234,10 +234,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (useGoogle) {
         const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const googleMessages = apiMessages.map((m) => ({
-          role: m.role,
-          parts: [{ text: m.content }],
-        }));
+        const googleMessages = apiMessages
+          .filter((m) => m.role !== 'system')
+          .map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+          }));
         const payload: any = {
           model: config.model,
           contents: googleMessages,
