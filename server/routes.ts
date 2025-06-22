@@ -165,14 +165,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const response = await ai.models.generateContent({
-          model: config.model,
+        const model = ai.getGenerativeModel({ model: config.model });
+        const result = await model.generateContent({
           contents: [{ role: "user", parts: [{ text: "Hello" }] }],
         });
+        const response = await result.response;
+        const text = await response.text();
         return res.json({
           success: true,
           message: "API connection successful",
-          response: { text: response.text },
+          response: { text },
         });
       }
 
@@ -250,29 +252,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const googleMessages = messages.map((m: any) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        }));
-        if (systemPrompt) {
-          if (googleMessages.length > 0 && googleMessages[0].role === "user") {
-            googleMessages[0] = {
-              role: "user",
-              parts: [{ text: `${systemPrompt}\n\n${googleMessages[0].parts[0].text}` }],
-            };
-          } else {
-            googleMessages.unshift({ role: "user", parts: [{ text: systemPrompt }] });
-          }
-        }
-        const payload: any = {
-          model: config.model,
-          contents: googleMessages,
-        };
-        const response = await ai.models.generateContent(payload);
+        const model = ai.getGenerativeModel({ model: config.model });
+
+        const googleMessages = [
+          ...(systemPrompt
+            ? [{ role: "user", parts: [{ text: `Инструкция: ${systemPrompt}` }] }]
+            : []),
+          ...messages.map((m: any) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
+        ];
+
+        const result = await model.generateContent({ contents: googleMessages });
+        const googleResponse = await result.response;
+        const text = await googleResponse.text();
         return res.json({
           choices: [
             {
-              message: { role: "assistant", content: response.text ?? "" },
+              message: {
+                role: "assistant",
+                content: text,
+              },
             },
           ],
         });
