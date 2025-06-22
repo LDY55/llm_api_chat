@@ -10,6 +10,9 @@ npm install @google/genai mime
 npm install -D @types/node
 ```
 
+После обновления репозитория не забудьте заново выполнить `npm install`, чтобы
+загрузить новые зависимости, включая Google SDK.
+
 ## Режим разработки
 
 ```bash

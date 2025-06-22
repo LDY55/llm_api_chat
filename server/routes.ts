@@ -155,7 +155,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (useGoogle) {
-        const { GoogleGenAI } = await import("@google/genai");
+        let GoogleGenAI: any;
+        try {
+          ({ GoogleGenAI } = await import("@google/genai"));
+        } catch (err) {
+          return res.status(500).json({
+            message: "Failed to load Google SDK. Ensure '@google/genai' is installed",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         const ai = new GoogleGenAI({ apiKey: config.token });
         const response = await ai.models.generateContent({
           model: config.model,
@@ -232,7 +240,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If using Google API, call via SDK
       if (useGoogle) {
-        const { GoogleGenAI } = await import("@google/genai");
+        let GoogleGenAI: any;
+        try {
+          ({ GoogleGenAI } = await import("@google/genai"));
+        } catch (err) {
+          return res.status(500).json({
+            message: "Failed to load Google SDK. Ensure '@google/genai' is installed",
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         const ai = new GoogleGenAI({ apiKey: config.token });
         const googleMessages = apiMessages
           .filter((m) => m.role !== 'system')
