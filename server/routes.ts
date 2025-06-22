@@ -250,16 +250,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const googleMessages = apiMessages
-          .filter((m) => m.role !== 'system')
-          .map((m) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }],
-          }));
+        const googleMessages = messages.map((m: any) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+        if (systemPrompt) {
+          if (googleMessages.length > 0 && googleMessages[0].role === "user") {
+            googleMessages[0] = {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\n${googleMessages[0].parts[0].text}` }],
+            };
+          } else {
+            googleMessages.unshift({ role: "user", parts: [{ text: systemPrompt }] });
+          }
+        }
         const payload: any = {
           model: config.model,
           contents: googleMessages,
-          config: systemPrompt ? { systemInstruction: systemPrompt } : undefined,
         };
         const response = await ai.models.generateContent(payload);
         return res.json({
