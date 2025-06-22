@@ -53,7 +53,10 @@ export class MemStorage implements IStorage {
           activeId?: number;
           configs?: ApiConfiguration[];
         };
-        const configs = data.configs ?? [];
+        const configs = (data.configs ?? []).map((c) => ({
+          ...c,
+          useGoogle: c.useGoogle ?? false,
+        }));
         this.apiConfigurations = new Map(configs.map((c) => [c.id!, c]));
         const maxId = configs.reduce((m, c) => Math.max(m, c.id ?? 0), 0);
         this.currentConfigId = maxId + 1;
@@ -214,6 +217,7 @@ export class MemStorage implements IStorage {
     const config: ApiConfiguration = {
       ...insertConfig,
       id,
+      useGoogle: insertConfig.useGoogle ?? false,
     };
     this.apiConfigurations.set(id, config);
     this.activeConfigId = id;

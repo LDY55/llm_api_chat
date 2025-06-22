@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -32,6 +33,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   const [endpoint, setEndpoint] = useState(config?.endpoint || "");
   const [token, setToken] = useState(config?.token || "");
   const [model, setModel] = useState(config?.model || "");
+  const [useGoogle, setUseGoogle] = useState(config?.useGoogle ?? false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -44,12 +46,13 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
       setEndpoint(config.endpoint);
       setToken(config.token);
       setModel(config.model);
+      setUseGoogle(config.useGoogle ?? false);
     }
   }, [config]);
 
   const saveConfigMutation = useMutation({
     mutationFn: async (
-      configData: { id?: number; name: string; endpoint: string; token: string; model: string },
+      configData: { id?: number; name: string; endpoint: string; token: string; model: string; useGoogle: boolean },
     ) => {
       return apiRequest("POST", "/api/config", configData);
     },
@@ -138,6 +141,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
       endpoint: endpoint.trim(),
       token: token.trim(),
       model: model.trim(),
+      useGoogle,
     });
   };
 
@@ -174,6 +178,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                     setEndpoint("");
                     setToken("");
                     setModel("");
+                    setUseGoogle(false);
                   } else {
                     const id = parseInt(val);
                     setSelectedId(id);
@@ -183,6 +188,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                       setEndpoint(cfg.endpoint);
                       setToken(cfg.token);
                       setModel(cfg.model);
+                      setUseGoogle(cfg.useGoogle ?? false);
                       activateMutation.mutate(id);
                     }
                   }
@@ -247,6 +253,17 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 <br />• NVIDIA: meta/llama3-70b-instruct
                 <br />• Anthropic: claude-3-sonnet-20240229
               </div>
+            </div>
+
+            <div className="flex items-center space-x-2 mt-6">
+              <Label htmlFor="useGoogle" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Использовать Google API
+              </Label>
+              <Switch
+                id="useGoogle"
+                checked={useGoogle}
+                onCheckedChange={(val) => setUseGoogle(val)}
+              />
             </div>
 
             <div>

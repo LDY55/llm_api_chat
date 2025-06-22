@@ -6,6 +6,8 @@
 
 ```bash
 npm install
+npm install @google/genai mime
+npm install -D @types/node
 ```
 
 ## Режим разработки

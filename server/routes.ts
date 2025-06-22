@@ -147,35 +147,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "API configuration not found" });
       }
 
+      if (config.useGoogle) {
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: config.token });
+        const response = await ai.models.generateContent({
+          model: config.model,
+          contents: "Hello",
+        });
+        return res.json({
+          success: true,
+          message: "API connection successful",
+          response: { text: response.text },
+        });
+      }
+
       const testMessage = {
         model: config.model,
         messages: [{ role: "user", content: "Hello" }],
-        max_tokens: 10
+        max_tokens: 10,
       };
 
       const response = await fetch(config.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.token}`
+          'Authorization': `Bearer ${config.token}`,
         },
-        body: JSON.stringify(testMessage)
+        body: JSON.stringify(testMessage),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
           message: `API Test Failed: ${response.status} ${response.statusText}`,
-          details: errorText
+          details: errorText,
         });
       }
 
       const data = await response.json();
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "API connection successful",
-        response: data
+        response: data,
       });
     } catch (error) {
       res.status(500).json({ 
@@ -197,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Prepare messages for LLM API
-      const apiMessages = [];
+      const apiMessages = [] as any[];
       
       if (systemPrompt) {
         apiMessages.push({
@@ -208,13 +222,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       apiMessages.push(...messages);
 
-      // Prepare the request payload
+      // If using Google API, call via SDK
+      if (config.useGoogle) {
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: config.token });
+        const googleMessages = apiMessages.map((m) => ({
+          role: m.role,
+          parts: [{ text: m.content }],
+        }));
+        const payload: any = {
+          model: config.model,
+          contents: googleMessages,
+        };
+        if (systemPrompt) {
+          payload.config = { systemInstruction: systemPrompt };
+        }
+        const response = await ai.models.generateContent(payload);
+        return res.json({
+          choices: [
+            {
+              message: { role: "assistant", content: response.text ?? "" },
+            },
+          ],
+        });
+      }
+
+      // Prepare the request payload for generic API
       const requestPayload = {
         model: config.model,
         messages: apiMessages,
         temperature: 0.7,
         max_tokens: 2000,
-        stream: false
+        stream: false,
       };
 
       console.log('Sending request to LLM API:', {
