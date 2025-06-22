@@ -12,9 +12,10 @@ interface SystemPromptsSidebarProps {
   prompts: SystemPrompt[];
   activePrompt: SystemPrompt | null;
   onSelectPrompt: (prompt: SystemPrompt) => void;
+  activeModel?: string;
 }
 
-export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: SystemPromptsSidebarProps) {
+export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt, activeModel }: SystemPromptsSidebarProps) {
   const [newPromptName, setNewPromptName] = useState("");
   const [newPromptContent, setNewPromptContent] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -277,6 +278,10 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt }: 
         <div className="text-xs text-muted-foreground mb-1">Активный промпт:</div>
         <div className="text-sm font-medium text-foreground">
           {activePrompt ? activePrompt.name : "Не выбран"}
+        </div>
+        <div className="text-xs text-muted-foreground mb-1 mt-2">Активная модель:</div>
+        <div className="text-sm font-medium text-foreground">
+          {activeModel || "Не выбрана"}
         </div>
       </div>
     </div>

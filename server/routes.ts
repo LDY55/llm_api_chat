@@ -84,17 +84,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API Configuration routes
   app.get("/api/config", async (req, res) => {
     try {
-      const config = await storage.getApiConfiguration();
+      const useGoogle = req.query.google === 'true';
+      const config = await storage.getApiConfiguration(undefined, useGoogle);
       res.json(config || null);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch configuration" });
     }
   });
 
-  app.get("/api/configs", async (_req, res) => {
+  app.get("/api/configs", async (req, res) => {
     try {
-      const configs = await storage.getAllApiConfigurations();
-      const active = await storage.getApiConfiguration();
+      const useGoogle = req.query.google === 'true';
+      const configs = await storage.getAllApiConfigurations(useGoogle);
+      const active = await storage.getApiConfiguration(undefined, useGoogle);
       res.json({ configs, activeId: active?.id ?? null });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch configurations" });
@@ -103,9 +105,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/config", async (req, res) => {
     try {
-      const validatedData = insertApiConfigurationSchema.parse(req.body);
+      const useGoogle = req.query.google === 'true';
+      const body = { ...req.body, useGoogle };
+      const validatedData = insertApiConfigurationSchema.parse(body);
       const id = req.body.id ? Number(req.body.id) : undefined;
-      const config = await storage.saveApiConfiguration({ ...validatedData, id });
+      const config = await storage.saveApiConfiguration({ ...validatedData, id }, useGoogle);
       res.json(config);
     } catch (error) {
       res.status(400).json({ message: "Invalid configuration data" });
@@ -114,8 +118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/configs/:id/activate", async (req, res) => {
     try {
+      const useGoogle = req.query.google === 'true';
       const id = Number(req.params.id);
-      const cfg = await storage.setActiveApiConfiguration(id);
+      const cfg = await storage.setActiveApiConfiguration(id, useGoogle);
       if (!cfg) {
         return res.status(404).json({ message: "Configuration not found" });
       }
@@ -127,8 +132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/configs/:id", async (req, res) => {
     try {
+      const useGoogle = req.query.google === 'true';
       const id = Number(req.params.id);
-      const deleted = await storage.deleteApiConfiguration(id);
+      const deleted = await storage.deleteApiConfiguration(id, useGoogle);
       if (!deleted) {
         return res.status(404).json({ message: "Configuration not found" });
       }
@@ -141,13 +147,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test API connection
   app.post("/api/config/test", async (req, res) => {
     try {
-      const config = await storage.getApiConfiguration();
+      const useGoogle = req.query.google === 'true';
+      const config = await storage.getApiConfiguration(undefined, useGoogle);
       
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
       }
 
-      if (config.useGoogle) {
+      if (useGoogle) {
         const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({ apiKey: config.token });
         const response = await ai.models.generateContent({
@@ -204,7 +211,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/chat", async (req, res) => {
     try {
       const { messages, systemPrompt } = req.body;
-      const config = await storage.getApiConfiguration();
+      const useGoogle = req.query.google === 'true';
+      const config = await storage.getApiConfiguration(undefined, useGoogle);
       
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
@@ -223,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       apiMessages.push(...messages);
 
       // If using Google API, call via SDK
-      if (config.useGoogle) {
+      if (useGoogle) {
         const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({ apiKey: config.token });
         const googleMessages = apiMessages.map((m) => ({

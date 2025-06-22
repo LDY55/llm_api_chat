@@ -8,7 +8,8 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 
-const CONFIG_FILE = path.join(process.cwd(), "api-config.json");
+const DEFAULT_CONFIG_FILE = path.join(process.cwd(), "api-config.json");
+const GOOGLE_CONFIG_FILE = path.join(process.cwd(), "google-api-config.json");
 
 export interface IStorage {
   // Users
@@ -28,52 +29,63 @@ export interface IStorage {
   clearChatMessages(): Promise<void>;
 
   // API Configuration
-  getApiConfiguration(id?: number): Promise<ApiConfiguration | undefined>;
-  getAllApiConfigurations(): Promise<ApiConfiguration[]>;
-  saveApiConfiguration(config: InsertApiConfiguration & { id?: number }): Promise<ApiConfiguration>;
-  deleteApiConfiguration(id: number): Promise<boolean>;
-  setActiveApiConfiguration(id: number): Promise<ApiConfiguration | undefined>;
+  getApiConfiguration(id?: number, useGoogle?: boolean): Promise<ApiConfiguration | undefined>;
+  getAllApiConfigurations(useGoogle?: boolean): Promise<ApiConfiguration[]>;
+  saveApiConfiguration(config: InsertApiConfiguration & { id?: number }, useGoogle?: boolean): Promise<ApiConfiguration>;
+  deleteApiConfiguration(id: number, useGoogle?: boolean): Promise<boolean>;
+  setActiveApiConfiguration(id: number, useGoogle?: boolean): Promise<ApiConfiguration | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private systemPrompts: Map<number, SystemPrompt>;
   private chatMessages: Map<number, ChatMessage>;
-  private apiConfigurations: Map<number, ApiConfiguration>;
-  private activeConfigId: number | undefined;
+  private configStores: Record<"default" | "google", {
+    configs: Map<number, ApiConfiguration>;
+    activeId: number | undefined;
+    nextId: number;
+  }>;
   private currentUserId: number;
   private currentPromptId: number;
   private currentMessageId: number;
-  private currentConfigId: number;
-  private loadConfigFromFile(): void {
+
+  private getStore(useGoogle: boolean) {
+    return this.configStores[useGoogle ? "google" : "default"];
+  }
+
+  private loadConfigs(useGoogle: boolean): void {
+    const file = useGoogle ? GOOGLE_CONFIG_FILE : DEFAULT_CONFIG_FILE;
+    const store = this.getStore(useGoogle);
     try {
-      if (fs.existsSync(CONFIG_FILE)) {
-        const raw = fs.readFileSync(CONFIG_FILE, "utf8");
+      if (fs.existsSync(file)) {
+        const raw = fs.readFileSync(file, "utf8");
         const data = JSON.parse(raw) as {
           activeId?: number;
           configs?: ApiConfiguration[];
         };
         const configs = (data.configs ?? []).map((c) => ({
           ...c,
-          useGoogle: c.useGoogle ?? false,
+          useGoogle,
         }));
-        this.apiConfigurations = new Map(configs.map((c) => [c.id!, c]));
+        store.configs = new Map(configs.map((c) => [c.id!, c]));
         const maxId = configs.reduce((m, c) => Math.max(m, c.id ?? 0), 0);
-        this.currentConfigId = maxId + 1;
-        this.activeConfigId = data.activeId;
+        store.nextId = maxId + 1;
+        store.activeId = data.activeId;
       }
     } catch (err) {
       console.error("Failed to load API configurations", err);
     }
   }
 
-  private persistConfigsToFile(): void {
+  private persistConfigs(useGoogle: boolean): void {
+    const file = useGoogle ? GOOGLE_CONFIG_FILE : DEFAULT_CONFIG_FILE;
+    const store = this.getStore(useGoogle);
     try {
       const payload = {
-        activeId: this.activeConfigId,
-        configs: Array.from(this.apiConfigurations.values()),
+        activeId: store.activeId,
+        configs: Array.from(store.configs.values()),
       };
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(payload, null, 2), "utf8");
+      fs.writeFileSync(file, JSON.stringify(payload, null, 2), "utf8");
     } catch (err) {
       console.error("Failed to save API configurations", err);
     }
@@ -83,18 +95,20 @@ export class MemStorage implements IStorage {
     this.users = new Map();
     this.systemPrompts = new Map();
     this.chatMessages = new Map();
-    this.apiConfigurations = new Map();
-    this.activeConfigId = undefined;
+    this.configStores = {
+      default: { configs: new Map(), activeId: undefined, nextId: 1 },
+      google: { configs: new Map(), activeId: undefined, nextId: 1 },
+    };
     this.currentUserId = 1;
     this.currentPromptId = 1;
     this.currentMessageId = 1;
-    this.currentConfigId = 1;
 
     // Initialize with default prompts
     this.initializeDefaultPrompts();
 
-    // Load persisted API configuration if available
-    this.loadConfigFromFile();
+    // Load persisted API configurations for both modes
+    this.loadConfigs(false);
+    this.loadConfigs(true);
   }
 
   private initializeDefaultPrompts() {
@@ -196,54 +210,61 @@ export class MemStorage implements IStorage {
     this.chatMessages.clear();
   }
 
-  async getApiConfiguration(id?: number): Promise<ApiConfiguration | undefined> {
+  async getApiConfiguration(id?: number, useGoogle: boolean = false): Promise<ApiConfiguration | undefined> {
+    const store = this.getStore(useGoogle);
     if (typeof id === "number") {
-      return this.apiConfigurations.get(id);
+      return store.configs.get(id);
     }
-    if (this.activeConfigId !== undefined) {
-      return this.apiConfigurations.get(this.activeConfigId);
+    if (store.activeId !== undefined) {
+      return store.configs.get(store.activeId);
     }
     return undefined;
   }
 
-  async getAllApiConfigurations(): Promise<ApiConfiguration[]> {
-    return Array.from(this.apiConfigurations.values());
+  async getAllApiConfigurations(useGoogle: boolean = false): Promise<ApiConfiguration[]> {
+    const store = this.getStore(useGoogle);
+    return Array.from(store.configs.values());
   }
 
   async saveApiConfiguration(
     insertConfig: InsertApiConfiguration & { id?: number },
+    useGoogle: boolean = false,
   ): Promise<ApiConfiguration> {
-    const id = insertConfig.id ?? this.currentConfigId++;
+    const store = this.getStore(useGoogle);
+    const id = insertConfig.id ?? store.nextId++;
     const config: ApiConfiguration = {
       ...insertConfig,
       id,
-      useGoogle: insertConfig.useGoogle ?? false,
+      useGoogle,
     };
-    this.apiConfigurations.set(id, config);
-    this.activeConfigId = id;
-    this.persistConfigsToFile();
+    store.configs.set(id, config);
+    store.activeId = id;
+    this.persistConfigs(useGoogle);
     return config;
   }
 
-  async deleteApiConfiguration(id: number): Promise<boolean> {
-    const deleted = this.apiConfigurations.delete(id);
+  async deleteApiConfiguration(id: number, useGoogle: boolean = false): Promise<boolean> {
+    const store = this.getStore(useGoogle);
+    const deleted = store.configs.delete(id);
     if (deleted) {
-      if (this.activeConfigId === id) {
-        const first = this.apiConfigurations.keys().next().value;
-        this.activeConfigId = first !== undefined ? first : undefined;
+      if (store.activeId === id) {
+        const first = store.configs.keys().next().value;
+        store.activeId = first !== undefined ? first : undefined;
       }
-      this.persistConfigsToFile();
+      this.persistConfigs(useGoogle);
     }
     return deleted;
   }
 
   async setActiveApiConfiguration(
     id: number,
+    useGoogle: boolean = false,
   ): Promise<ApiConfiguration | undefined> {
-    const cfg = this.apiConfigurations.get(id);
+    const store = this.getStore(useGoogle);
+    const cfg = store.configs.get(id);
     if (cfg) {
-      this.activeConfigId = id;
-      this.persistConfigsToFile();
+      store.activeId = id;
+      this.persistConfigs(useGoogle);
     }
     return cfg;
   }

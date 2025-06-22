@@ -21,11 +21,13 @@ interface ConfigurationPanelProps {
   expanded: boolean;
   onToggle: () => void;
   config: ApiConfiguration | null | undefined;
+  googleMode: boolean;
+  onGoogleModeChange: (val: boolean) => void;
 }
 
-export function ConfigurationPanel({ expanded, onToggle, config }: ConfigurationPanelProps) {
+export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onGoogleModeChange }: ConfigurationPanelProps) {
   const { data: configList } = useQuery<{ configs: ApiConfiguration[]; activeId: number | null }>({
-    queryKey: ["/api/configs"],
+    queryKey: [`/api/configs?google=${googleMode}`],
   });
 
   const [selectedId, setSelectedId] = useState<number | undefined>(config?.id);
@@ -33,8 +35,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   const [endpoint, setEndpoint] = useState(config?.endpoint || "");
   const [token, setToken] = useState(config?.token || "");
   const [model, setModel] = useState(config?.model || "");
-  const [useGoogle, setUseGoogle] = useState(config?.useGoogle ?? false);
-  
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -46,7 +47,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
       setEndpoint(config.endpoint);
       setToken(config.token);
       setModel(config.model);
-      setUseGoogle(config.useGoogle ?? false);
     }
   }, [config]);
 
@@ -54,11 +54,11 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
     mutationFn: async (
       configData: { id?: number; name: string; endpoint: string; token: string; model: string; useGoogle: boolean },
     ) => {
-      return apiRequest("POST", "/api/config", configData);
+      return apiRequest("POST", `/api/config?google=${googleMode}`, configData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
       toast({
         title: "Конфигурация сохранена",
         description: "API настройки успешно обновлены",
@@ -75,7 +75,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
 
   const testConfigMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/config/test");
+      const response = await apiRequest("POST", `/api/config/test?google=${googleMode}`);
       return response.json();
     },
     onSuccess: (data) => {
@@ -103,21 +103,21 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
 
   const activateMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("POST", `/api/configs/${id}/activate`);
+      return apiRequest("POST", `/api/configs/${id}/activate?google=${googleMode}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
     },
   });
 
   const deleteConfigMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/configs/${id}`);
+      return apiRequest("DELETE", `/api/configs/${id}?google=${googleMode}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/config"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/configs"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
       toast({ title: "Конфигурация удалена" });
     },
     onError: () => {
@@ -126,7 +126,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
   });
 
   const handleSave = () => {
-    if (!name.trim() || !endpoint.trim() || !token.trim() || !model.trim()) {
+    if (!name.trim() || (!googleMode && !endpoint.trim()) || !token.trim() || !model.trim()) {
       toast({
         title: "Заполните все поля",
         description: "Все поля конфигурации обязательны для заполнения",
@@ -141,7 +141,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
       endpoint: endpoint.trim(),
       token: token.trim(),
       model: model.trim(),
-      useGoogle,
+      useGoogle: googleMode,
     });
   };
 
@@ -152,6 +152,10 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
           <h2 className="text-lg font-semibold text-foreground">Конфигурация API</h2>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="google-mode" className="text-sm">Google API</Label>
+              <Switch id="google-mode" checked={googleMode} onCheckedChange={onGoogleModeChange} />
+            </div>
             <Button
               variant="ghost"
               size="sm"
@@ -178,7 +182,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                     setEndpoint("");
                     setToken("");
                     setModel("");
-                    setUseGoogle(false);
                   } else {
                     const id = parseInt(val);
                     setSelectedId(id);
@@ -188,7 +191,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                       setEndpoint(cfg.endpoint);
                       setToken(cfg.token);
                       setModel(cfg.model);
-                      setUseGoogle(cfg.useGoogle ?? false);
                       activateMutation.mutate(id);
                     }
                   }
@@ -255,16 +257,6 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 mt-6">
-              <Label htmlFor="useGoogle" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Использовать Google API
-              </Label>
-              <Switch
-                id="useGoogle"
-                checked={useGoogle}
-                onCheckedChange={(val) => setUseGoogle(val)}
-              />
-            </div>
 
             <div>
               <Label htmlFor="endpoint" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
@@ -276,6 +268,7 @@ export function ConfigurationPanel({ expanded, onToggle, config }: Configuration
                 placeholder="https://api.openai.com/v1/chat/completions"
                 value={endpoint}
                 onChange={(e) => setEndpoint(e.target.value)}
+                disabled={googleMode}
                 className="mt-2"
               />
               <div className="mt-1 text-xs text-muted-foreground">
