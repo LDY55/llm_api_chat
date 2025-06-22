@@ -28,6 +28,7 @@ export const apiConfigurations = pgTable("api_configurations", {
   endpoint: text("endpoint").notNull(),
   token: text("token").notNull(),
   model: text("model").notNull(),
+  useGoogle: boolean("use_google").default(false).notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
