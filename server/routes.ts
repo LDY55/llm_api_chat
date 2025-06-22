@@ -261,7 +261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           contents: googleMessages,
         };
         if (systemPrompt) {
-          payload.config = { systemInstruction: systemPrompt };
+          payload.systemInstruction = { role: 'user', parts: [{ text: systemPrompt }] };
         }
         const response = await ai.models.generateContent(payload);
         return res.json({
