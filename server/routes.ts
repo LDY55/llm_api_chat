@@ -165,16 +165,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const model = ai.getGenerativeModel({ model: config.model });
-        const result = await model.generateContent({
+        const result = await ai.models.generateContent({
+          model: config.model,
           contents: [{ role: "user", parts: [{ text: "Hello" }] }],
         });
-        const response = await result.response;
-        const text = await response.text();
         return res.json({
           success: true,
           message: "API connection successful",
-          response: { text },
+          response: { text: result.text },
         });
       }
 
@@ -252,7 +250,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         const ai = new GoogleGenAI({ apiKey: config.token });
-        const model = ai.getGenerativeModel({ model: config.model });
 
         const googleMessages = [
           ...(systemPrompt
@@ -264,15 +261,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })),
         ];
 
-        const result = await model.generateContent({ contents: googleMessages });
-        const googleResponse = await result.response;
-        const text = await googleResponse.text();
+        const result = await ai.models.generateContent({
+          model: config.model,
+          contents: googleMessages,
+        });
         return res.json({
           choices: [
             {
               message: {
                 role: "assistant",
-                content: text,
+                content: result.text,
               },
             },
           ],
