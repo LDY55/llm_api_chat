@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useSession } from "@/hooks/use-session";
 
@@ -23,7 +23,10 @@ export default function Login() {
 
   const mutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/login", { username, password }),
-    onSuccess: () => navigate("/"),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/session"] });
+      navigate("/");
+    },
     onError: () =>
       toast({ title: "Login failed", variant: "destructive" }),
   });
