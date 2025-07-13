@@ -142,6 +142,9 @@ export class MemStorage implements IStorage {
     // Load persisted API configurations for both modes
     this.loadConfigs(false);
     this.loadConfigs(true);
+
+    // Add default user
+    this.createUser({ username: "ldy", password: "123d5812dd3DDD" });
   }
 
   private initializeDefaultPrompts() {
