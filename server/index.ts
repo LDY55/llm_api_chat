@@ -1,10 +1,23 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectMem from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+const MemStore = connectMem(session);
+app.use(
+  session({
+    cookie: { maxAge: 86400000 },
+    store: new MemStore({ checkPeriod: 86400000 }),
+    secret: "secret",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
 app.use((req, res, next) => {
   const start = Date.now();

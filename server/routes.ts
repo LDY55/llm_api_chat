@@ -1,9 +1,40 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.post("/api/login", async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    const user = await storage.getUserByUsername(username);
+    if (user && user.password === password) {
+      (req.session as any).userId = user.id;
+      return res.json({ success: true });
+    }
+    res.status(401).json({ message: "Invalid credentials" });
+  });
+
+  app.post("/api/logout", (req: Request, res: Response) => {
+    req.session.destroy(() => {
+      res.status(204).end();
+    });
+  });
+
+  app.get("/api/session", (req: Request, res: Response) => {
+    if ((req.session as any).userId) {
+      return res.json({ authenticated: true });
+    }
+    res.status(401).json({ authenticated: false });
+  });
+
+  app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+    if (req.path === "/login" || req.path === "/logout" || req.path === "/session") {
+      return next();
+    }
+    if ((req.session as any).userId) return next();
+    res.status(401).json({ message: "Unauthorized" });
+  });
+
   // System Prompts routes
   app.get("/api/prompts", async (req, res) => {
     try {
