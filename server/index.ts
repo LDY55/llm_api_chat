@@ -5,17 +5,31 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+const isProduction = app.get("env") === "production";
+if (isProduction) {
+  // Respect X-Forwarded-* headers from the reverse proxy (Nginx).
+  app.set("trust proxy", 1);
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 const MemStore = connectMem(session);
+const oneDayMs = 24 * 60 * 60 * 1000;
+const sessionMaxAgeMs = Number(process.env.SESSION_MAX_AGE_MS ?? oneDayMs);
+const sessionSecret = process.env.SESSION_SECRET ?? "dev-secret";
 app.use(
   session({
-    cookie: { maxAge: 86400000 },
-    store: new MemStore({ checkPeriod: 86400000 }),
-    secret: "secret",
+    cookie: {
+      maxAge: sessionMaxAgeMs,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+    },
+    store: new MemStore({ checkPeriod: sessionMaxAgeMs }),
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
   })
 );
 
@@ -63,7 +77,7 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  if (!isProduction) {
     await setupVite(app, server);
   } else {
     serveStatic(app);
