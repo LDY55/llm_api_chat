@@ -138,7 +138,7 @@ export function SystemPromptsSidebar({ prompts, activePrompt, onSelectPrompt, ac
   };
 
   return (
-    <div className="w-80 bg-card border-r border-border flex flex-col overflow-hidden">
+    <div className="w-full sm:w-80 h-full bg-card border-r border-border flex flex-col overflow-hidden">
       <div className="p-4 border-b border-border">
         <h3 className="text-lg font-semibold text-foreground mb-3">Системные промпты</h3>
         

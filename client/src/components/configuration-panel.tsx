@@ -148,9 +148,9 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
   return (
     <div className="bg-card border-b border-border shadow-sm transition-all duration-300">
       <div className="p-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Конфигурация API</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ThemeToggle />
             <div className="flex items-center space-x-2">
               <Label htmlFor="google-mode" className="text-sm">Google API</Label>
@@ -282,12 +282,12 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
         )}
         
         {expanded && (
-          <div className="mt-4 flex justify-end space-x-3">
+          <div className="mt-4 flex flex-col sm:flex-row sm:justify-end gap-2 sm:space-x-3">
             <Button
               onClick={() => testConfigMutation.mutate()}
               disabled={testConfigMutation.isPending || !config}
               variant="outline"
-              className="border-primary text-primary hover:bg-primary/10 dark:hover:bg-primary/20"
+              className="w-full sm:w-auto border-primary text-primary hover:bg-primary/10 dark:hover:bg-primary/20"
             >
               {testConfigMutation.isPending ? "Тестирование..." : "Тестировать API"}
             </Button>
@@ -296,6 +296,7 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
                 onClick={() => deleteConfigMutation.mutate(selectedId)}
                 variant="destructive"
                 disabled={deleteConfigMutation.isPending}
+                className="w-full sm:w-auto"
               >
                 Удалить
               </Button>
@@ -303,7 +304,7 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
             <Button
               onClick={handleSave}
               disabled={saveConfigMutation.isPending}
-              className="bg-primary hover:bg-blue-700"
+              className="w-full sm:w-auto bg-primary hover:bg-blue-700"
             >
               {saveConfigMutation.isPending ? "Сохранение..." : "Сохранить конфигурацию"}
             </Button>

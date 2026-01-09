@@ -204,7 +204,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -213,7 +213,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
             }`}
           >
             <div
-              className={`max-w-3xl px-4 py-3 rounded-2xl ${
+              className={`max-w-[90%] sm:max-w-3xl px-4 py-3 rounded-2xl ${
                 message.role === "user"
                   ? "bg-primary text-white rounded-br-md"
                   : "bg-card border border-border rounded-bl-md shadow-sm"
@@ -245,7 +245,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
 
         {isLoading && (
           <div className="message flex justify-start">
-            <div className="max-w-3xl bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
+            <div className="max-w-[90%] sm:max-w-3xl bg-card border border-border px-4 py-3 rounded-2xl rounded-bl-md shadow-sm">
               <div className="flex items-center space-x-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">Печатает...</span>
@@ -257,8 +257,8 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-border p-4 bg-card">
-        <div className="flex space-x-3">
+      <div className="border-t border-border p-3 sm:p-4 bg-card">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <Textarea
               placeholder="Введите ваш вопрос..."
@@ -270,11 +270,11 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
               className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
             />
           </div>
-          <div className="flex flex-col space-y-2">
+          <div className="flex flex-row sm:flex-col gap-2">
             <Button
               onClick={handleSendMessage}
               disabled={isLoading || !currentMessage.trim() || !isConfigured}
-              className="px-6 py-3 bg-primary hover:bg-blue-700"
+              className="flex-1 sm:flex-none px-6 py-3 bg-primary hover:bg-blue-700"
             >
               <Send className="w-5 h-5" />
             </Button>
@@ -282,7 +282,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
               onClick={handleClearChat}
               disabled={clearMessagesMutation.isPending}
               variant="secondary"
-              className="px-6 py-3 bg-slate-500 hover:bg-slate-600 text-white dark:bg-slate-700"
+              className="flex-1 sm:flex-none px-6 py-3 bg-slate-500 hover:bg-slate-600 text-white dark:bg-slate-700"
               title="Очистить чат"
             >
               <Trash2 className="w-5 h-5" />
@@ -290,11 +290,11 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           </div>
         </div>
 
-        <div className="flex justify-between items-center mt-3 text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mt-3 text-xs text-muted-foreground">
           <div>
             {isLoading ? "Отправка сообщения..." : "Готов к отправке"}
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex flex-wrap items-center gap-3">
             <span>Сообщений: {messages.length}</span>
             <span className="flex items-center">
               <div className={`w-2 h-2 rounded-full mr-1 ${
