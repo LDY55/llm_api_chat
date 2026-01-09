@@ -17,13 +17,23 @@ const MemStore = connectMem(session);
 const oneDayMs = 24 * 60 * 60 * 1000;
 const sessionMaxAgeMs = Number(process.env.SESSION_MAX_AGE_MS ?? oneDayMs);
 const sessionSecret = process.env.SESSION_SECRET ?? "dev-secret";
+const sessionCookieSecure = process.env.SESSION_COOKIE_SECURE;
+let cookieSecure: boolean | "auto" = false;
+if (sessionCookieSecure === "true") {
+  cookieSecure = true;
+} else if (sessionCookieSecure === "false") {
+  cookieSecure = false;
+} else {
+  // Use X-Forwarded-Proto to decide when behind a reverse proxy.
+  cookieSecure = isProduction ? "auto" : false;
+}
 app.use(
   session({
     cookie: {
       maxAge: sessionMaxAgeMs,
       httpOnly: true,
       sameSite: "lax",
-      secure: isProduction,
+      secure: cookieSecure,
     },
     store: new MemStore({ checkPeriod: sessionMaxAgeMs }),
     secret: sessionSecret,
