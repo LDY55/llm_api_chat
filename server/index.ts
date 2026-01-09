@@ -1,8 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import connectMem from "memorystore";
+import path from "node:path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { JsonFileSessionStore } from "./session-store";
 
 const app = express();
 const isProduction = app.get("env") === "production";
@@ -13,7 +14,6 @@ if (isProduction) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const MemStore = connectMem(session);
 const oneDayMs = 24 * 60 * 60 * 1000;
 const sessionMaxAgeMs = Number(process.env.SESSION_MAX_AGE_MS ?? oneDayMs);
 const sessionSecret = process.env.SESSION_SECRET ?? "dev-secret";
@@ -35,7 +35,9 @@ app.use(
       sameSite: "lax",
       secure: cookieSecure,
     },
-    store: new MemStore({ checkPeriod: sessionMaxAgeMs }),
+    store: new JsonFileSessionStore(
+      process.env.SESSION_STORE_PATH ?? path.join(process.cwd(), "data", "sessions.json")
+    ),
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,

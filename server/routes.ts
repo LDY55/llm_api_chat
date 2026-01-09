@@ -7,11 +7,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/login", async (req: Request, res: Response) => {
     const { username, password } = req.body;
     const user = await storage.getUserByUsername(username);
-    if (user && user.password === password) {
-      (req.session as any).userId = user.id;
-      return res.json({ success: true });
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
-    res.status(401).json({ message: "Invalid credentials" });
+
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error("Failed to regenerate session", err);
+        return res.status(500).json({ message: "Failed to start session" });
+      }
+      (req.session as any).userId = user.id;
+      res.json({ success: true });
+    });
   });
 
   app.post("/api/logout", (req: Request, res: Response) => {

@@ -5,3 +5,6 @@ server/public
 vite.config.ts.*
 *.tar.gz
 api-config.json
+google-api-config.json
+system-prompts.json
+data/
