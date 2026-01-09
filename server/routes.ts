@@ -1,9 +1,45 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema } from "@shared/schema";
+import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema, insertNoteSchema, type Note } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const summarizeNote = async (note: Note): Promise<string | null> => {
+    try {
+      if (!note.content.trim()) return null;
+      const config = await storage.getApiConfiguration(undefined, true);
+      if (!config) return null;
+
+      let GoogleGenAI: any;
+      try {
+        ({ GoogleGenAI } = await import("@google/genai"));
+      } catch (err) {
+        console.error("Failed to load Google SDK for note summary", err);
+        return null;
+      }
+
+      const ai = new GoogleGenAI({ apiKey: config.token });
+      const prompt = [
+        "Сделай краткое описание заметки в 1 короткой фразе (до 120 символов).",
+        "Ответ только на русском.",
+        "Заметка:",
+        note.content,
+      ].join("\n");
+
+      const result = await ai.models.generateContent({
+        model: config.model,
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+
+      const summary = result.text?.trim();
+      if (!summary) return null;
+      return summary.replace(/\s+/g, " ").slice(0, 160);
+    } catch (error) {
+      console.error("Failed to summarize note", error);
+      return null;
+    }
+  };
+
   app.post("/api/login", async (req: Request, res: Response) => {
     const { username, password } = req.body;
     const user = await storage.getUserByUsername(username);
@@ -87,6 +123,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error) {
       res.status(500).json({ message: "Failed to delete prompt" });
+    }
+  });
+
+  // Notes routes
+  app.get("/api/notes", async (req, res) => {
+    try {
+      const notes = await storage.getAllNotes();
+      res.json(notes);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch notes" });
+    }
+  });
+
+  app.post("/api/notes", async (req, res) => {
+    try {
+      const validatedData = insertNoteSchema.parse(req.body);
+      let note = await storage.createNote(validatedData);
+      const summary = await summarizeNote(note);
+      if (summary) {
+        note = (await storage.setNoteSummary(note.id, summary)) ?? note;
+      }
+      res.status(201).json(note);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid note data" });
+    }
+  });
+
+  app.put("/api/notes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validatedData = insertNoteSchema.parse(req.body);
+      let updated = await storage.updateNote(id, validatedData);
+      if (!updated) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+      const summary = await summarizeNote(updated);
+      if (summary) {
+        updated = (await storage.setNoteSummary(updated.id, summary)) ?? updated;
+      }
+      res.json(updated);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid note data" });
+    }
+  });
+
+  app.delete("/api/notes/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteNote(id);
+      if (deleted) {
+        res.status(204).send();
+      } else {
+        res.status(404).json({ message: "Note not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete note" });
+    }
+  });
+
+  app.delete("/api/notes", async (req, res) => {
+    try {
+      await storage.clearNotes();
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to clear notes" });
     }
   });
 

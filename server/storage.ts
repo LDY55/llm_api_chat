@@ -3,7 +3,8 @@ import {
   type User, type InsertUser,
   type SystemPrompt, type InsertSystemPrompt,
   type ChatMessage, type InsertChatMessage,
-  type ApiConfiguration, type InsertApiConfiguration
+  type ApiConfiguration, type InsertApiConfiguration,
+  type Note, type InsertNote
 } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +12,7 @@ import path from "node:path";
 const DEFAULT_CONFIG_FILE = path.join(process.cwd(), "api-config.json");
 const GOOGLE_CONFIG_FILE = path.join(process.cwd(), "google-api-config.json");
 const PROMPTS_FILE = path.join(process.cwd(), "system-prompts.json");
+const NOTES_FILE = path.join(process.cwd(), "notes.json");
 
 export interface IStorage {
   // Users
@@ -35,12 +37,21 @@ export interface IStorage {
   saveApiConfiguration(config: InsertApiConfiguration & { id?: number }, useGoogle?: boolean): Promise<ApiConfiguration>;
   deleteApiConfiguration(id: number, useGoogle?: boolean): Promise<boolean>;
   setActiveApiConfiguration(id: number, useGoogle?: boolean): Promise<ApiConfiguration | undefined>;
+
+  // Notes
+  getAllNotes(): Promise<Note[]>;
+  createNote(note: InsertNote): Promise<Note>;
+  updateNote(id: number, note: InsertNote): Promise<Note | undefined>;
+  setNoteSummary(id: number, summary: string): Promise<Note | undefined>;
+  deleteNote(id: number): Promise<boolean>;
+  clearNotes(): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private systemPrompts: Map<number, SystemPrompt>;
   private chatMessages: Map<number, ChatMessage>;
+  private notes: Map<number, Note>;
   private configStores: Record<"default" | "google", {
     configs: Map<number, ApiConfiguration>;
     activeId: number | undefined;
@@ -49,6 +60,7 @@ export class MemStorage implements IStorage {
   private currentUserId: number;
   private currentPromptId: number;
   private currentMessageId: number;
+  private currentNoteId: number;
 
   private getStore(useGoogle: boolean) {
     return this.configStores[useGoogle ? "google" : "default"];
@@ -94,6 +106,24 @@ export class MemStorage implements IStorage {
     }
   }
 
+  private loadNotes(): void {
+    try {
+      if (fs.existsSync(NOTES_FILE)) {
+        const raw = fs.readFileSync(NOTES_FILE, "utf8");
+        const data = JSON.parse(raw) as Note[];
+        const normalized = data.map((note) => ({
+          ...note,
+          createdAt: note.createdAt ?? note.updatedAt ?? new Date().toISOString(),
+        }));
+        this.notes = new Map(normalized.map((note) => [note.id, note]));
+        const maxId = data.reduce((m, note) => Math.max(m, note.id ?? 0), 0);
+        this.currentNoteId = maxId + 1;
+      }
+    } catch (err) {
+      console.error("Failed to load notes", err);
+    }
+  }
+
   private persistPrompts(): void {
     try {
       fs.writeFileSync(
@@ -103,6 +133,18 @@ export class MemStorage implements IStorage {
       );
     } catch (err) {
       console.error("Failed to save system prompts", err);
+    }
+  }
+
+  private persistNotes(): void {
+    try {
+      fs.writeFileSync(
+        NOTES_FILE,
+        JSON.stringify(Array.from(this.notes.values()), null, 2),
+        "utf8"
+      );
+    } catch (err) {
+      console.error("Failed to save notes", err);
     }
   }
 
@@ -124,6 +166,7 @@ export class MemStorage implements IStorage {
     this.users = new Map();
     this.systemPrompts = new Map();
     this.chatMessages = new Map();
+    this.notes = new Map();
     this.configStores = {
       default: { configs: new Map(), activeId: undefined, nextId: 1 },
       google: { configs: new Map(), activeId: undefined, nextId: 1 },
@@ -131,6 +174,7 @@ export class MemStorage implements IStorage {
     this.currentUserId = 1;
     this.currentPromptId = 1;
     this.currentMessageId = 1;
+    this.currentNoteId = 1;
 
     // Load persisted system prompts if available
     this.loadPrompts();
@@ -138,6 +182,9 @@ export class MemStorage implements IStorage {
       this.initializeDefaultPrompts();
       this.persistPrompts();
     }
+
+    // Load persisted notes if available
+    this.loadNotes();
 
     // Load persisted API configurations for both modes
     this.loadConfigs(false);
@@ -309,6 +356,79 @@ export class MemStorage implements IStorage {
       this.persistConfigs(useGoogle);
     }
     return cfg;
+  }
+
+  async getAllNotes(): Promise<Note[]> {
+    return Array.from(this.notes.values()).sort((a, b) =>
+      a.updatedAt.localeCompare(b.updatedAt)
+    );
+  }
+
+  async createNote(insertNote: InsertNote): Promise<Note> {
+    const id = this.currentNoteId++;
+    const content = insertNote.content ?? "";
+    const title = insertNote.title ?? this.deriveNoteTitle(content);
+    const createdAt = new Date().toISOString();
+    const note: Note = {
+      id,
+      title: title.length > 0 ? title : "Без названия",
+      content,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    this.notes.set(id, note);
+    this.persistNotes();
+    return note;
+  }
+
+  async updateNote(id: number, insertNote: InsertNote): Promise<Note | undefined> {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    const content = insertNote.content ?? existing.content;
+    const title = insertNote.title ?? this.deriveNoteTitle(content);
+    const updated: Note = {
+      ...existing,
+      title: title.length > 0 ? title : "Без названия",
+      content,
+      createdAt: existing.createdAt ?? existing.updatedAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.notes.set(id, updated);
+    this.persistNotes();
+    return updated;
+  }
+
+  async setNoteSummary(id: number, summary: string): Promise<Note | undefined> {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    const updated: Note = {
+      ...existing,
+      summary,
+    };
+    this.notes.set(id, updated);
+    this.persistNotes();
+    return updated;
+  }
+
+  async deleteNote(id: number): Promise<boolean> {
+    const deleted = this.notes.delete(id);
+    if (deleted) {
+      this.persistNotes();
+    }
+    return deleted;
+  }
+
+  async clearNotes(): Promise<void> {
+    this.notes.clear();
+    this.persistNotes();
+  }
+
+  private deriveNoteTitle(content: string): string {
+    const firstLine = content
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    return (firstLine ?? "").slice(0, 32);
   }
 }
 

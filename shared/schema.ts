@@ -50,6 +50,20 @@ export const insertApiConfigurationSchema = createInsertSchema(apiConfigurations
   id: true,
 });
 
+export const noteSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  content: z.string(),
+  createdAt: z.string(),
+  summary: z.string().optional(),
+  updatedAt: z.string(),
+});
+
+export const insertNoteSchema = z.object({
+  title: z.string().optional(),
+  content: z.string().default(""),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -61,3 +75,6 @@ export type ChatMessage = typeof chatMessages.$inferSelect;
 
 export type InsertApiConfiguration = z.infer<typeof insertApiConfigurationSchema>;
 export type ApiConfiguration = typeof apiConfigurations.$inferSelect;
+
+export type InsertNote = z.infer<typeof insertNoteSchema>;
+export type Note = z.infer<typeof noteSchema>;
