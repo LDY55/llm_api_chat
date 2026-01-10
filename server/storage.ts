@@ -546,6 +546,7 @@ export class MemStorage implements IStorage {
           totalTokens: record.totalTokens,
           model: record.model,
           useGoogle: record.useGoogle,
+          configId: record.configId,
         });
       }
     }

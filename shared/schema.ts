@@ -71,6 +71,7 @@ export const apiUsageEntrySchema = z.object({
   totalTokens: z.number(),
   model: z.string().optional(),
   useGoogle: z.boolean().optional(),
+  configId: z.number().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
