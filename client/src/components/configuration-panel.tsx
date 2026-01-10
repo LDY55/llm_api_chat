@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -29,6 +30,12 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
   const { data: configList } = useQuery<{ configs: ApiConfiguration[]; activeId: number | null }>({
     queryKey: [`/api/configs?google=${googleMode}`],
   });
+  const { data: googleModels = [], isLoading: googleModelsLoading } = useQuery<
+    { name: string; displayName: string }[]
+  >({
+    queryKey: ["/api/google/models", config?.id ?? null],
+    enabled: googleMode,
+  });
 
   const [selectedId, setSelectedId] = useState<number | undefined>(config?.id);
   const [name, setName] = useState(config?.name || "");
@@ -50,6 +57,12 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
     }
   }, [config]);
 
+  const googleModelOptions = useMemo(() => {
+    const hasCurrent = googleModels.some((entry) => entry.name === model);
+    if (hasCurrent || !model) return googleModels;
+    return [{ name: model, displayName: model }, ...googleModels];
+  }, [googleModels, model]);
+
   const saveConfigMutation = useMutation({
     mutationFn: async (
       configData: { id?: number; name: string; endpoint: string; token: string; model: string; useGoogle: boolean },
@@ -59,6 +72,7 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google/models"] });
       toast({
         title: "Конфигурация сохранена",
         description: "API настройки успешно обновлены",
@@ -108,6 +122,7 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google/models"] });
     },
   });
 
@@ -118,6 +133,7 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/config?google=${googleMode}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/configs?google=${googleMode}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/google/models"] });
       toast({ title: "Конфигурация удалена" });
     },
     onError: () => {
@@ -225,38 +241,81 @@ export function ConfigurationPanel({ expanded, onToggle, config, googleMode, onG
 
             <div>
               <Label htmlFor="token" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
-                API Токен
+                API key
               </Label>
-              <Input
-                id="token"
-                type="password"
-                placeholder="sk-..."
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                className="mt-2"
-              />
+              {googleMode ? (
+                <Textarea
+                  id="token"
+                  placeholder={`key-1\nkey-2`}
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  className="mt-2 min-h-[96px]"
+                />
+              ) : (
+                <Input
+                  id="token"
+                  type="password"
+                  placeholder="sk-..."
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  className="mt-2"
+                />
+              )}
+              {googleMode && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  One key per line for round-robin usage.
+                </div>
+              )}
             </div>
 
             <div>
               <Label htmlFor="model" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">
-                Модель
+                Model
               </Label>
-              <Input
-                id="model"
-                type="text"
-                placeholder="gpt-3.5-turbo"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="mt-2"
-              />
-              <div className="mt-1 text-xs text-muted-foreground">
-                Примеры:
-                <br />• OpenAI: gpt-4, gpt-3.5-turbo
-                <br />• NVIDIA: meta/llama3-70b-instruct
-                <br />• Anthropic: claude-3-sonnet-20240229
-              </div>
+              {googleMode ? (
+                <>
+                  <Select value={model} onValueChange={setModel} disabled={googleModelsLoading}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue
+                        placeholder={googleModelsLoading ? "Loading models..." : "Select model"}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {googleModelOptions.length === 0 && (
+                        <SelectItem value="__empty" disabled>
+                          No models available
+                        </SelectItem>
+                      )}
+                      {googleModelOptions.map((entry) => (
+                        <SelectItem key={entry.name} value={entry.name}>
+                          {entry.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Models list is loaded from Google API.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Input
+                    id="model"
+                    type="text"
+                    placeholder="gpt-3.5-turbo"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="mt-2"
+                  />
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Examples:
+                    <br />- OpenAI: gpt-4, gpt-3.5-turbo
+                    <br />- NVIDIA: meta/llama3-70b-instruct
+                    <br />- Anthropic: claude-3-sonnet-20240229
+                  </div>
+                </>
+              )}
             </div>
-
 
             <div>
               <Label htmlFor="endpoint" className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-300">

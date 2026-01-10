@@ -4,11 +4,161 @@ import { storage } from "./storage";
 import { insertSystemPromptSchema, insertChatMessageSchema, insertApiConfigurationSchema, insertNoteSchema, type Note } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  const googleTokenCursorByConfig = new Map<number, number>();
+
+  const parseTokenList = (tokenField: string): string[] => {
+    return tokenField
+      .split(/[\n,]+/g)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+  };
+
+  const getNextGoogleToken = (config: { id?: number; token: string }): string => {
+    const tokens = parseTokenList(config.token ?? "");
+    if (tokens.length === 0) return "";
+    const configId = config.id ?? 0;
+    const nextIndex = (googleTokenCursorByConfig.get(configId) ?? 0) % tokens.length;
+    googleTokenCursorByConfig.set(configId, (nextIndex + 1) % tokens.length);
+    return tokens[nextIndex];
+  };
+
+  const estimateTokensFromText = (text: string | null | undefined): number => {
+    if (!text) return 0;
+    const normalized = text.replace(/\s+/g, " ").trim();
+    if (!normalized) return 0;
+    return Math.max(1, Math.ceil(normalized.length / 4));
+  };
+
+  const estimateTokensFromMessages = (messages: any[]): number => {
+    if (!Array.isArray(messages)) return 0;
+    let total = 0;
+    for (const message of messages) {
+      if (!message) continue;
+      if (typeof message.content === "string") {
+        total += estimateTokensFromText(message.content);
+        continue;
+      }
+      if (Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (typeof part?.text === "string") {
+            total += estimateTokensFromText(part.text);
+          }
+        }
+      }
+      if (Array.isArray(message.parts)) {
+        for (const part of message.parts) {
+          if (typeof part?.text === "string") {
+            total += estimateTokensFromText(part.text);
+          }
+        }
+      }
+    }
+    return total;
+  };
+
+  const extractResponseTexts = (data: any): string[] => {
+    if (!data) return [];
+    if (typeof data === "string") return [data];
+    const texts: string[] = [];
+    if (Array.isArray(data.choices)) {
+      for (const choice of data.choices) {
+        if (typeof choice?.message?.content === "string") {
+          texts.push(choice.message.content);
+        } else if (typeof choice?.text === "string") {
+          texts.push(choice.text);
+        }
+      }
+    }
+    if (typeof data.message?.content === "string") {
+      texts.push(data.message.content);
+    }
+    if (typeof data.output_text === "string") {
+      texts.push(data.output_text);
+    }
+    if (typeof data.content === "string") {
+      texts.push(data.content);
+    } else if (Array.isArray(data.content)) {
+      for (const part of data.content) {
+        if (typeof part?.text === "string") {
+          texts.push(part.text);
+        }
+      }
+    }
+    return texts;
+  };
+
+  const extractUsageTokens = (usage: any): number | null => {
+    if (!usage) return null;
+    const total =
+      usage.total_tokens ??
+      usage.totalTokens ??
+      usage.totalTokenCount ??
+      usage.total_token_count;
+    if (typeof total === "number") return total;
+    const input =
+      usage.prompt_tokens ??
+      usage.input_tokens ??
+      usage.inputTokens ??
+      usage.promptTokenCount ??
+      usage.prompt_token_count;
+    const output =
+      usage.completion_tokens ??
+      usage.output_tokens ??
+      usage.outputTokens ??
+      usage.candidatesTokenCount ??
+      usage.candidates_token_count;
+    if (typeof input === "number" && typeof output === "number") {
+      return input + output;
+    }
+    return null;
+  };
+
+  const extractTokensFromResponse = (data: any): number | null => {
+    if (!data) return null;
+    return extractUsageTokens(data.usage ?? data.usageMetadata ?? data.usage_metadata);
+  };
+
+  const extractTokensFromGoogle = (result: any): number | null => {
+    const usage =
+      result?.usageMetadata ??
+      result?.response?.usageMetadata ??
+      result?.response?.usage_metadata ??
+      result?.usage_metadata;
+    return extractUsageTokens(usage);
+  };
+
+  const recordUsage = async (params: {
+    token: string;
+    name?: string;
+    model?: string;
+    useGoogle?: boolean;
+    configId?: number;
+    totalTokens: number | null;
+    estimatedTokens?: number;
+  }) => {
+    const totalTokens =
+      Number.isFinite(params.totalTokens) && (params.totalTokens as number) > 0
+        ? (params.totalTokens as number)
+        : Number.isFinite(params.estimatedTokens)
+          ? (params.estimatedTokens as number)
+          : 0;
+    await storage.recordApiUsage({
+      token: params.token,
+      name: params.name,
+      model: params.model,
+      useGoogle: params.useGoogle,
+      configId: params.configId,
+      totalTokens,
+    });
+  };
+
   const summarizeNote = async (note: Note): Promise<string | null> => {
     try {
       if (!note.content.trim()) return null;
       const config = await storage.getApiConfiguration(undefined, true);
       if (!config) return null;
+      const selectedToken = getNextGoogleToken(config);
+      if (!selectedToken) return null;
 
       let GoogleGenAI: any;
       try {
@@ -18,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return null;
       }
 
-      const ai = new GoogleGenAI({ apiKey: config.token });
+      const ai = new GoogleGenAI({ apiKey: selectedToken });
       const prompt = [
         "Сделай краткое описание заметки в 1 короткой фразе (до 120 символов).",
         "Ответ только на русском.",
@@ -29,6 +179,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await ai.models.generateContent({
         model: config.model,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+
+      await recordUsage({
+        token: selectedToken,
+        name: config.name,
+        model: config.model,
+        useGoogle: true,
+        configId: config.id,
+        totalTokens: extractTokensFromGoogle(result),
+        estimatedTokens:
+          estimateTokensFromText(prompt) + estimateTokensFromText(result.text ?? ""),
       });
 
       const summary = result.text?.trim();
@@ -191,6 +352,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/google/models", async (_req, res) => {
+    try {
+      const config = await storage.getApiConfiguration(undefined, true);
+      if (!config) {
+        return res.status(400).json({ message: "Google API configuration not found" });
+      }
+      const selectedToken = getNextGoogleToken(config);
+      if (!selectedToken) {
+        return res.status(400).json({ message: "Google API keys not configured" });
+      }
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(selectedToken)}`
+      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(response.status).json({
+          message: `Failed to fetch Google models: ${response.status} ${response.statusText}`,
+          details: errorText,
+        });
+      }
+      const data = await response.json();
+      const models = Array.isArray(data?.models) ? data.models : [];
+      const filtered = models.filter((model: any) => {
+        const methods = model.supportedGenerationMethods ?? model.supported_generation_methods ?? [];
+        return Array.isArray(methods) ? methods.includes("generateContent") : true;
+      });
+      res.json(
+        filtered.map((model: any) => ({
+          name: model.name,
+          displayName: model.displayName ?? model.display_name ?? model.name,
+        }))
+      );
+    } catch (error) {
+      res.status(500).json({
+        message: "Failed to fetch Google models",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get("/api/usage", async (_req, res) => {
+    try {
+      const usage = await storage.getApiUsage();
+      res.json(usage);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch usage" });
+    }
+  });
+
   // Chat Messages routes
   app.get("/api/messages", async (req, res) => {
     try {
@@ -303,10 +513,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: err instanceof Error ? err.message : String(err),
           });
         }
-        const ai = new GoogleGenAI({ apiKey: config.token });
+        selectedToken = getNextGoogleToken(config);
+        if (!selectedToken) {
+          return res.status(400).json({ message: "Google API keys not configured" });
+        }
+        const ai = new GoogleGenAI({ apiKey: selectedToken });
         const result = await ai.models.generateContent({
           model: config.model,
           contents: [{ role: "user", parts: [{ text: "Hello" }] }],
+        });
+        await recordUsage({
+          token: selectedToken,
+          name: config.name,
+          model: config.model,
+          useGoogle: true,
+          configId: config.id,
+          totalTokens: extractTokensFromGoogle(result),
+          estimatedTokens:
+            estimateTokensFromText("Hello") + estimateTokensFromText(result.text ?? ""),
         });
         return res.json({
           success: true,
@@ -356,10 +580,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // LLM API proxy route
   app.post("/api/chat", async (req, res) => {
+    let config: any = undefined;
+    let inputEstimate = 0;
+    let selectedToken: string | null = null;
     try {
       const { messages, systemPrompt } = req.body;
       const useGoogle = req.query.google === 'true';
-      const config = await storage.getApiConfiguration(undefined, useGoogle);
+      config = await storage.getApiConfiguration(undefined, useGoogle);
       
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
@@ -377,6 +604,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       apiMessages.push(...messages);
 
+      inputEstimate = estimateTokensFromMessages(apiMessages);
+
       // If using Google API, call via SDK
       if (useGoogle) {
         let GoogleGenAI: any;
@@ -388,7 +617,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             error: err instanceof Error ? err.message : String(err),
           });
         }
-        const ai = new GoogleGenAI({ apiKey: config.token });
+        selectedToken = getNextGoogleToken(config);
+        if (!selectedToken) {
+          return res.status(400).json({ message: "Google API keys not configured" });
+        }
+        const ai = new GoogleGenAI({ apiKey: selectedToken });
 
         const googleMessages = [
           ...(systemPrompt
@@ -403,6 +636,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const result = await ai.models.generateContent({
           model: config.model,
           contents: googleMessages,
+        });
+        await recordUsage({
+          token: selectedToken,
+          name: config.name,
+          model: config.model,
+          useGoogle: true,
+          configId: config.id,
+          totalTokens: extractTokensFromGoogle(result),
+          estimatedTokens:
+            inputEstimate + estimateTokensFromText(result.text ?? ""),
         });
         return res.json({
           choices: [
@@ -465,8 +708,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = await response.json();
       console.log('LLM API success, response keys:', Object.keys(data));
+      const outputEstimate = extractResponseTexts(data)
+        .map((text) => estimateTokensFromText(text))
+        .reduce((sum, value) => sum + value, 0);
+      await recordUsage({
+        token: config.token,
+        name: config.name,
+        model: config.model,
+        useGoogle: false,
+        configId: config.id,
+        totalTokens: extractTokensFromResponse(data),
+        estimatedTokens: inputEstimate + outputEstimate,
+      });
       res.json(data);
     } catch (error) {
+      if (config?.token) {
+        await recordUsage({
+          token: selectedToken ?? config.token,
+          name: config.name,
+          model: config.model,
+          useGoogle: config.useGoogle,
+          configId: config.id,
+          totalTokens: null,
+          estimatedTokens: inputEstimate,
+        });
+      }
       console.error('Chat API error:', error);
       res.status(500).json({ 
         message: "Failed to process chat request",

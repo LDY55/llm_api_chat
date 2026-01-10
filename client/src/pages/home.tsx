@@ -4,6 +4,7 @@ import { ConfigurationPanel } from "@/components/configuration-panel";
 import { SystemPromptsSidebar } from "@/components/system-prompts-sidebar";
 import { ChatInterface } from "@/components/chat-interface";
 import { NotesPanel } from "@/components/notes-panel";
+import { UsagePanel } from "@/components/usage-panel";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -18,7 +19,7 @@ export default function Home() {
   const [activePrompt, setActivePrompt] = useState<SystemPrompt | null>(null);
   const [googleMode, setGoogleMode] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "notes">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "notes" | "usage">("chat");
   const isMobile = useIsMobile();
 
   // Load prompts
@@ -83,6 +84,15 @@ export default function Home() {
           >
             Заметки
           </Button>
+          <Button
+            type="button"
+            variant={activeTab === "usage" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("usage")}
+            className="h-8 px-3"
+          >
+            Usage
+          </Button>
         </div>
 
         {isMobile && activeTab === "chat" && (
@@ -121,8 +131,10 @@ export default function Home() {
             googleMode={googleMode}
           />
         </div>
-      ) : (
+      ) : activeTab === "notes" ? (
         <NotesPanel />
+      ) : (
+        <UsagePanel />
       )}
     </div>
   );

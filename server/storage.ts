@@ -4,15 +4,18 @@ import {
   type SystemPrompt, type InsertSystemPrompt,
   type ChatMessage, type InsertChatMessage,
   type ApiConfiguration, type InsertApiConfiguration,
-  type Note, type InsertNote
+  type Note, type InsertNote,
+  type ApiUsageEntry
 } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 const DEFAULT_CONFIG_FILE = path.join(process.cwd(), "api-config.json");
 const GOOGLE_CONFIG_FILE = path.join(process.cwd(), "google-api-config.json");
 const PROMPTS_FILE = path.join(process.cwd(), "system-prompts.json");
 const NOTES_FILE = path.join(process.cwd(), "notes.json");
+const USAGE_FILE = path.join(process.cwd(), "data", "api-usage.json");
 
 export interface IStorage {
   // Users
@@ -45,13 +48,36 @@ export interface IStorage {
   setNoteSummary(id: number, summary: string): Promise<Note | undefined>;
   deleteNote(id: number): Promise<boolean>;
   clearNotes(): Promise<void>;
+
+  // API Usage
+  getApiUsage(): Promise<ApiUsageEntry[]>;
+  recordApiUsage(params: {
+    token: string;
+    name?: string;
+    model?: string;
+    useGoogle?: boolean;
+    configId?: number;
+    totalTokens: number;
+    recordedAt?: Date;
+  }): Promise<void>;
 }
+
+type UsageRecord = {
+  tokenMask: string;
+  name?: string;
+  model?: string;
+  useGoogle?: boolean;
+  configId?: number;
+  requests: number;
+  totalTokens: number;
+};
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private systemPrompts: Map<number, SystemPrompt>;
   private chatMessages: Map<number, ChatMessage>;
   private notes: Map<number, Note>;
+  private usageByDate: Map<string, Map<string, UsageRecord>>;
   private configStores: Record<"default" | "google", {
     configs: Map<number, ApiConfiguration>;
     activeId: number | undefined;
@@ -124,6 +150,43 @@ export class MemStorage implements IStorage {
     }
   }
 
+  private loadUsage(): void {
+    try {
+      if (fs.existsSync(USAGE_FILE)) {
+        const raw = fs.readFileSync(USAGE_FILE, "utf8");
+        const data = JSON.parse(raw) as Array<{
+          date: string;
+          tokenHash: string;
+          tokenMask: string;
+          name?: string;
+          model?: string;
+          useGoogle?: boolean;
+          configId?: number;
+          requests: number;
+          totalTokens: number;
+        }>;
+        this.usageByDate = new Map();
+        for (const entry of data) {
+          if (!entry?.date || !entry?.tokenHash) continue;
+          const byToken = this.usageByDate.get(entry.date) ?? new Map();
+          const key = this.getUsageKey(entry.tokenHash, entry.configId);
+          byToken.set(key, {
+            tokenMask: entry.tokenMask,
+            name: entry.name,
+            model: entry.model,
+            useGoogle: entry.useGoogle,
+            configId: entry.configId,
+            requests: entry.requests ?? 0,
+            totalTokens: entry.totalTokens ?? 0,
+          });
+          this.usageByDate.set(entry.date, byToken);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load API usage", err);
+    }
+  }
+
   private persistPrompts(): void {
     try {
       fs.writeFileSync(
@@ -148,6 +211,45 @@ export class MemStorage implements IStorage {
     }
   }
 
+  private persistUsage(): void {
+    try {
+      const dir = path.dirname(USAGE_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const payload: Array<{
+        date: string;
+        tokenHash: string;
+        tokenMask: string;
+        name?: string;
+        model?: string;
+        useGoogle?: boolean;
+        configId?: number;
+        requests: number;
+        totalTokens: number;
+      }> = [];
+      for (const [date, tokens] of this.usageByDate.entries()) {
+        for (const [usageKey, record] of tokens.entries()) {
+          const tokenHash = usageKey.split(":")[0];
+          payload.push({
+            date,
+            tokenHash,
+            tokenMask: record.tokenMask,
+            name: record.name,
+            model: record.model,
+            useGoogle: record.useGoogle,
+            configId: record.configId,
+            requests: record.requests,
+            totalTokens: record.totalTokens,
+          });
+        }
+      }
+      fs.writeFileSync(USAGE_FILE, JSON.stringify(payload, null, 2), "utf8");
+    } catch (err) {
+      console.error("Failed to save API usage", err);
+    }
+  }
+
   private persistConfigs(useGoogle: boolean): void {
     const file = useGoogle ? GOOGLE_CONFIG_FILE : DEFAULT_CONFIG_FILE;
     const store = this.getStore(useGoogle);
@@ -167,6 +269,7 @@ export class MemStorage implements IStorage {
     this.systemPrompts = new Map();
     this.chatMessages = new Map();
     this.notes = new Map();
+    this.usageByDate = new Map();
     this.configStores = {
       default: { configs: new Map(), activeId: undefined, nextId: 1 },
       google: { configs: new Map(), activeId: undefined, nextId: 1 },
@@ -185,6 +288,9 @@ export class MemStorage implements IStorage {
 
     // Load persisted notes if available
     this.loadNotes();
+
+    // Load persisted API usage
+    this.loadUsage();
 
     // Load persisted API configurations for both modes
     this.loadConfigs(false);
@@ -423,12 +529,98 @@ export class MemStorage implements IStorage {
     this.persistNotes();
   }
 
+  async getApiUsage(): Promise<ApiUsageEntry[]> {
+    const entries: ApiUsageEntry[] = [];
+    const dates = Array.from(this.usageByDate.keys()).sort((a, b) => b.localeCompare(a));
+    for (const date of dates) {
+      const tokens = this.usageByDate.get(date);
+      if (!tokens) continue;
+      for (const record of tokens.values()) {
+        const tokenLabel = record.name
+          ? `${record.name} (${record.tokenMask})`
+          : record.tokenMask;
+        entries.push({
+          date,
+          tokenLabel,
+          requests: record.requests,
+          totalTokens: record.totalTokens,
+          model: record.model,
+          useGoogle: record.useGoogle,
+        });
+      }
+    }
+    return entries;
+  }
+
+  async recordApiUsage(params: {
+    token: string;
+    name?: string;
+    model?: string;
+    useGoogle?: boolean;
+    configId?: number;
+    totalTokens: number;
+    recordedAt?: Date;
+  }): Promise<void> {
+    const token = params.token?.trim();
+    if (!token) return;
+    const dateKey = this.toDateKey(params.recordedAt ?? new Date());
+    const tokenHash = this.hashToken(token);
+    const tokenMask = this.maskToken(token);
+    const byToken = this.usageByDate.get(dateKey) ?? new Map<string, UsageRecord>();
+    const usageKey = this.getUsageKey(tokenHash, params.configId);
+    const existing = byToken.get(usageKey) ?? {
+      tokenMask,
+      name: params.name,
+      model: params.model,
+      useGoogle: params.useGoogle,
+      configId: params.configId,
+      requests: 0,
+      totalTokens: 0,
+    };
+    existing.tokenMask = tokenMask;
+    if (params.name) existing.name = params.name;
+    if (params.model) existing.model = params.model;
+    if (typeof params.useGoogle === "boolean") existing.useGoogle = params.useGoogle;
+    if (typeof params.configId === "number") existing.configId = params.configId;
+    existing.requests += 1;
+    existing.totalTokens += Number.isFinite(params.totalTokens) ? params.totalTokens : 0;
+    byToken.set(usageKey, existing);
+    this.usageByDate.set(dateKey, byToken);
+    this.persistUsage();
+  }
+
   private deriveNoteTitle(content: string): string {
     const firstLine = content
       .split("\n")
       .map((line) => line.trim())
       .find((line) => line.length > 0);
     return (firstLine ?? "").slice(0, 32);
+  }
+
+  private toDateKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  private maskToken(token: string): string {
+    const trimmed = token.trim();
+    if (trimmed.length <= 8) {
+      return trimmed.length > 0 ? `${trimmed.slice(0, 2)}...` : "***";
+    }
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+  }
+
+  private hashToken(token: string): string {
+    return crypto.createHash("sha256").update(token).digest("hex").slice(0, 16);
+  }
+
+  private getUsageKey(tokenHash: string, configId?: number): string {
+    if (typeof configId === "number") {
+      return `${tokenHash}:${configId}`;
+    }
+    return tokenHash;
   }
 }
 

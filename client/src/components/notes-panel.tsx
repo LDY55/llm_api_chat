@@ -202,9 +202,10 @@ export function NotesPanel() {
         </div>
         {activeNote ? (
           <>
-            {createdLabel && (
-              <div className="text-xs text-muted-foreground">
-                Создано: {createdLabel}
+            {(createdLabel || activeNote.summary) && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {createdLabel && <span>Создано: {createdLabel}</span>}
+                {activeNote.summary && <span>Описание: {activeNote.summary}</span>}
               </div>
             )}
             <Textarea

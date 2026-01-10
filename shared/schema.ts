@@ -64,6 +64,15 @@ export const insertNoteSchema = z.object({
   content: z.string().default(""),
 });
 
+export const apiUsageEntrySchema = z.object({
+  date: z.string(),
+  tokenLabel: z.string(),
+  requests: z.number(),
+  totalTokens: z.number(),
+  model: z.string().optional(),
+  useGoogle: z.boolean().optional(),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
@@ -78,3 +87,5 @@ export type ApiConfiguration = typeof apiConfigurations.$inferSelect;
 
 export type InsertNote = z.infer<typeof insertNoteSchema>;
 export type Note = z.infer<typeof noteSchema>;
+
+export type ApiUsageEntry = z.infer<typeof apiUsageEntrySchema>;
