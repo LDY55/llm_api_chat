@@ -13,4 +13,11 @@ export interface ChatRequest {
     content: string;
   }>;
   systemPrompt?: string;
+  attachments?: Array<{
+    name: string;
+    kind: "text" | "image";
+    mimeType: string;
+    text?: string;
+    data?: string;
+  }>;
 }
