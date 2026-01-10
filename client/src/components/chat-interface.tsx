@@ -27,6 +27,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       mimeType: string;
       text?: string;
       data?: string;
+      sizeBytes: number;
     }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -127,9 +128,10 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
   });
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024;
-  const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
-  const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 900 * 1024;
+  const MAX_IMAGE_BYTES = 512 * 1024;
   const MAX_TEXT_CHARS = 100000;
+  const textEncoder = new TextEncoder();
 
   const readFileAsText = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -161,7 +163,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     event.target.value = "";
 
     const next: typeof attachments = [];
-    let totalBytes = attachments.reduce((sum, item) => sum + (item.data ? item.data.length : 0), 0);
+    let totalBytes = attachments.reduce((sum, item) => sum + item.sizeBytes, 0);
 
     for (const file of files) {
       if (file.size > MAX_FILE_BYTES) {
@@ -176,7 +178,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       if (totalBytes + file.size > MAX_TOTAL_BYTES) {
         toast({
           title: "Attachments too large",
-          description: "Total attachment size exceeds 2MB.",
+          description: "Total attachment size exceeds 900KB.",
           variant: "destructive",
         });
         break;
@@ -184,32 +186,34 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
 
       try {
         if (file.type.startsWith("image/")) {
-          if (!googleMode) {
-            toast({
-              title: "Images not supported",
-              description: "Image uploads are only supported in Google mode.",
-              variant: "destructive",
-            });
-            continue;
-          }
           if (file.size > MAX_IMAGE_BYTES) {
             toast({
               title: "Image too large",
-              description: `${file.name} exceeds the 1MB limit.`,
+              description: `${file.name} exceeds the 512KB limit.`,
               variant: "destructive",
             });
             continue;
           }
           const dataUrl = await readFileAsDataURL(file);
           const base64 = dataUrl.split(",")[1] ?? "";
+          const payloadSize = base64.length;
+          if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
+            toast({
+              title: "Attachments too large",
+              description: "Total attachment size exceeds 900KB.",
+              variant: "destructive",
+            });
+            continue;
+          }
           next.push({
             id: crypto.randomUUID(),
             name: file.name,
             kind: "image",
             mimeType: file.type || "application/octet-stream",
             data: base64,
+            sizeBytes: payloadSize,
           });
-          totalBytes += file.size;
+          totalBytes += payloadSize;
           continue;
         }
 
@@ -226,28 +230,48 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           if (text.length > MAX_TEXT_CHARS) {
             text = `${text.slice(0, MAX_TEXT_CHARS)}\n\n[Truncated]`;
           }
+          const payloadSize = textEncoder.encode(text).length;
+          if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
+            toast({
+              title: "Attachments too large",
+              description: "Total attachment size exceeds 900KB.",
+              variant: "destructive",
+            });
+            continue;
+          }
           next.push({
             id: crypto.randomUUID(),
             name: file.name,
             kind: "text",
             mimeType: "text/csv",
             text,
+            sizeBytes: payloadSize,
           });
-          totalBytes += file.size;
+          totalBytes += payloadSize;
           continue;
         }
 
         const text = await readFileAsText(file);
         const normalized =
           text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}\n\n[Truncated]` : text;
+        const payloadSize = textEncoder.encode(normalized).length;
+        if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
+          toast({
+            title: "Attachments too large",
+            description: "Total attachment size exceeds 900KB.",
+            variant: "destructive",
+          });
+          continue;
+        }
         next.push({
           id: crypto.randomUUID(),
           name: file.name,
           kind: "text",
           mimeType: file.type || "text/plain",
           text: normalized,
+          sizeBytes: payloadSize,
         });
-        totalBytes += file.size;
+        totalBytes += payloadSize;
       } catch (error) {
         console.error("Failed to read file", error);
         toast({
@@ -308,11 +332,14 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       content: `${content}${attachmentSummary}`.trim(),
     });
 
+    const trimmedMessages =
+      attachments.length > 0 ? conversationMessages.slice(-6) : conversationMessages;
+
     // Send to LLM
     chatMutation.mutate({
-      messages: conversationMessages,
+      messages: trimmedMessages,
       systemPrompt: activePrompt?.content,
-      attachments: attachments.map(({ id, ...rest }) => rest),
+      attachments: attachments.map(({ id, sizeBytes, ...rest }) => rest),
     });
   };
 
@@ -420,8 +447,17 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       <div className="border-t border-border p-3 sm:p-4 bg-card">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
           <div className="flex-1">
+            <Textarea
+              placeholder="Type your message..."
+              rows={3}
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+              className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
+            />
             {attachments.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {attachments.map((file) => (
                   <div
                     key={file.id}
@@ -439,15 +475,6 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
                 ))}
               </div>
             )}
-            <Textarea
-              placeholder="Введите ваш вопрос..."
-              rows={3}
-              value={currentMessage}
-              onChange={(e) => setCurrentMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
-            />
           </div>
           <div className="flex flex-row sm:flex-col gap-2 sm:items-start">
             <input
