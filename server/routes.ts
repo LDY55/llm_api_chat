@@ -127,46 +127,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return extractUsageTokens(usage);
   };
 
-  const formatTextAttachment = (attachment: any) => {
-    const name = attachment?.name ?? "file";
-    const text = String(attachment?.text ?? "");
-    return `File: ${name}\n${text}`;
-  };
-
-  const getAttachmentText = (attachments: any[]): string => {
-    const MAX_IMAGE_CHARS = 100000;
-    const blocks: string[] = [];
-    for (const att of attachments) {
-      if (att?.kind === "text" && att?.text) {
-        blocks.push(formatTextAttachment(att));
-      } else if (att?.kind === "image" && att?.data) {
-        const name = att?.name ?? "image";
-        const mime = att?.mimeType ?? "application/octet-stream";
-        const raw = String(att.data);
-        const trimmed =
-          raw.length > MAX_IMAGE_CHARS ? `${raw.slice(0, MAX_IMAGE_CHARS)}\n[Truncated]` : raw;
-        blocks.push(`Image: ${name} (${mime})\n${trimmed}`);
-      }
-    }
-    return blocks.length > 0 ? blocks.join("\n\n") : "";
-  };
-
-  const getAttachmentPartsForGoogle = (attachments: any[]) => {
-    const parts: any[] = [];
-    for (const att of attachments) {
-      if (att?.kind === "text" && att?.text) {
-        parts.push({ text: formatTextAttachment(att) });
-      } else if (att?.kind === "image" && att?.data && att?.mimeType) {
-        parts.push({
-          inlineData: {
-            mimeType: att.mimeType,
-            data: att.data,
-          },
-        });
-      }
-    }
-    return parts;
-  };
 
   const recordUsage = async (params: {
     token: string;
@@ -625,16 +585,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let inputEstimate = 0;
     let selectedToken: string | null = null;
     try {
-      const { messages, systemPrompt, attachments } = req.body;
+      const { messages, systemPrompt } = req.body;
       const useGoogle = req.query.google === 'true';
       config = await storage.getApiConfiguration(undefined, useGoogle);
       
       if (!config) {
         return res.status(400).json({ message: "API configuration not found" });
       }
-
-      const attachmentList = Array.isArray(attachments) ? attachments : [];
-      const attachmentText = getAttachmentText(attachmentList);
 
       // Prepare messages for LLM API
       const apiMessages = [] as any[];
@@ -647,12 +604,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       apiMessages.push(...messages);
-      if (attachmentText) {
-        apiMessages.push({
-          role: "user",
-          content: attachmentText,
-        });
-      }
 
       inputEstimate = estimateTokensFromMessages(apiMessages);
 
@@ -682,15 +633,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             parts: [{ text: m.content }],
           })),
         ];
-        const attachmentParts = getAttachmentPartsForGoogle(attachmentList);
-        if (attachmentParts.length > 0) {
-          const lastIndex = googleMessages.length - 1;
-          if (lastIndex >= 0 && googleMessages[lastIndex].role === "user") {
-            googleMessages[lastIndex].parts.push(...attachmentParts);
-          } else {
-            googleMessages.push({ role: "user", parts: attachmentParts });
-          }
-        }
 
         const result = await ai.models.generateContent({
           model: config.model,

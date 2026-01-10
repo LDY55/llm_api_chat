@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2, Paperclip, X } from "lucide-react";
+import { Send, Trash2, Loader2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SystemPrompt, ApiConfiguration, ChatMessage } from "@shared/schema";
 import type { LLMResponse, ChatRequest } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
-import * as XLSX from "xlsx";
 
 interface ChatInterfaceProps {
   activePrompt: SystemPrompt | null;
@@ -19,19 +18,7 @@ interface ChatInterfaceProps {
 export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfaceProps) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [attachments, setAttachments] = useState<
-    Array<{
-      id: string;
-      name: string;
-      kind: "text" | "image";
-      mimeType: string;
-      text?: string;
-      data?: string;
-      sizeBytes: number;
-    }>
-  >([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -127,174 +114,9 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     },
   });
 
-  const MAX_FILE_BYTES = 10 * 1024 * 1024;
-  const MAX_TOTAL_BYTES = 200 * 1024;
-  const MAX_IMAGE_BYTES = 150 * 1024;
-  const MAX_TEXT_CHARS = 20000;
-  const MAX_REQUEST_BYTES = 200 * 1024;
-  const textEncoder = new TextEncoder();
-
-  const readFileAsText = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(file);
-    });
-
-  const readFileAsDataURL = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-
-  const readFileAsArrayBuffer = (file: File) =>
-    new Promise<ArrayBuffer>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as ArrayBuffer);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsArrayBuffer(file);
-    });
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    if (files.length === 0) return;
-    event.target.value = "";
-
-    const next: typeof attachments = [];
-    let totalBytes = attachments.reduce((sum, item) => sum + item.sizeBytes, 0);
-
-    for (const file of files) {
-      if (file.size > MAX_FILE_BYTES) {
-        toast({
-          title: "File too large",
-          description: `${file.name} exceeds the 10MB limit.`,
-          variant: "destructive",
-        });
-        continue;
-      }
-
-      if (totalBytes + file.size > MAX_TOTAL_BYTES) {
-        toast({
-          title: "Attachments too large",
-          description: "Total attachment size exceeds 200KB.",
-          variant: "destructive",
-        });
-        break;
-      }
-
-      try {
-        if (file.type.startsWith("image/")) {
-          if (file.size > MAX_IMAGE_BYTES) {
-            toast({
-              title: "Image too large",
-              description: `${file.name} exceeds the 150KB limit.`,
-              variant: "destructive",
-            });
-            continue;
-          }
-          const dataUrl = await readFileAsDataURL(file);
-          const base64 = dataUrl.split(",")[1] ?? "";
-          const payloadSize = base64.length;
-          if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
-            toast({
-              title: "Attachments too large",
-              description: "Total attachment size exceeds 200KB.",
-              variant: "destructive",
-            });
-            continue;
-          }
-          next.push({
-            id: crypto.randomUUID(),
-            name: file.name,
-            kind: "image",
-            mimeType: file.type || "application/octet-stream",
-            data: base64,
-            sizeBytes: payloadSize,
-          });
-          totalBytes += payloadSize;
-          continue;
-        }
-
-        const lower = file.name.toLowerCase();
-        if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
-          const buffer = await readFileAsArrayBuffer(file);
-          const workbook = XLSX.read(buffer, { type: "array" });
-          const sheets = workbook.SheetNames.map((name) => {
-            const sheet = workbook.Sheets[name];
-            const csv = XLSX.utils.sheet_to_csv(sheet);
-            return `Sheet: ${name}\n${csv}`;
-          });
-          let text = sheets.join("\n\n");
-          if (text.length > MAX_TEXT_CHARS) {
-            text = `${text.slice(0, MAX_TEXT_CHARS)}\n\n[Truncated]`;
-          }
-          const payloadSize = textEncoder.encode(text).length;
-          if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
-            toast({
-              title: "Attachments too large",
-              description: "Total attachment size exceeds 200KB.",
-              variant: "destructive",
-            });
-            continue;
-          }
-          next.push({
-            id: crypto.randomUUID(),
-            name: file.name,
-            kind: "text",
-            mimeType: "text/csv",
-            text,
-            sizeBytes: payloadSize,
-          });
-          totalBytes += payloadSize;
-          continue;
-        }
-
-        const text = await readFileAsText(file);
-        const normalized =
-          text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}\n\n[Truncated]` : text;
-        const payloadSize = textEncoder.encode(normalized).length;
-        if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
-          toast({
-            title: "Attachments too large",
-            description: "Total attachment size exceeds 200KB.",
-            variant: "destructive",
-          });
-          continue;
-        }
-        next.push({
-          id: crypto.randomUUID(),
-          name: file.name,
-          kind: "text",
-          mimeType: file.type || "text/plain",
-          text: normalized,
-          sizeBytes: payloadSize,
-        });
-        totalBytes += payloadSize;
-      } catch (error) {
-        console.error("Failed to read file", error);
-        toast({
-          title: "Failed to read file",
-          description: file.name,
-          variant: "destructive",
-        });
-      }
-    }
-
-    if (next.length > 0) {
-      setAttachments((prev) => [...prev, ...next]);
-    }
-  };
-
-  const removeAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((item) => item.id !== id));
-  };
-
   const handleSendMessage = async () => {
     const content = currentMessage.trim();
-    if (!content && attachments.length === 0) return;
+    if (!content) return;
 
     if (!config) {
       toast({
@@ -305,19 +127,15 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       return;
     }
 
-    const attachmentSummary =
-      attachments.length > 0
-        ? `\n\n[Files: ${attachments.map((file) => file.name).join(", ")}]`
         : "";
 
     // Clear input
     setCurrentMessage("");
-    setAttachments([]);
     setIsLoading(true);
 
     // Add user message
     addMessageMutation.mutate({
-      content: `${content}${attachmentSummary}`.trim(),
+      content,
       role: "user",
     });
 
@@ -330,42 +148,14 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     // Add current message
     conversationMessages.push({
       role: "user",
-      content: `${content}${attachmentSummary}`.trim(),
+      content,
     });
-
-    const attachmentBytes = attachments.reduce((sum, item) => sum + item.sizeBytes, 0);
-    const budget = Math.max(8 * 1024, MAX_REQUEST_BYTES - attachmentBytes);
-    const trimmedMessages = trimMessagesByBytes(conversationMessages, budget);
-    if (trimmedMessages.length < conversationMessages.length) {
-      toast({
-        title: "Context trimmed",
-        description: "Previous messages were shortened to fit the request size.",
-      });
-    }
 
     // Send to LLM
     chatMutation.mutate({
-      messages: trimmedMessages,
+      messages: conversationMessages,
       systemPrompt: activePrompt?.content,
-      attachments: attachments.map(({ id, sizeBytes, ...rest }) => rest),
     });
-
-  const trimMessagesByBytes = (
-    messagesList: Array<{ role: string; content: string }>,
-    maxBytes: number,
-  ) => {
-    let total = 0;
-    const trimmed: Array<{ role: string; content: string }> = [];
-    for (let i = messagesList.length - 1; i >= 0; i -= 1) {
-      const entry = messagesList[i];
-      const size = textEncoder.encode(entry.content ?? "").length + 16;
-      if (total + size > maxBytes) break;
-      trimmed.push(entry);
-      total += size;
-    }
-    return trimmed.reverse();
-  };
-  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -480,48 +270,11 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
               disabled={isLoading}
               className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
             />
-            {attachments.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {attachments.map((file) => (
-                  <div
-                    key={file.id}
-                    className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground"
-                  >
-                    <span className="max-w-[180px] truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(file.id)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
           <div className="flex flex-row sm:flex-col gap-2 self-start">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,.txt,.md,.csv,.tsv,.xlsx,.xls"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="flex-1 sm:flex-none px-6 py-3"
-              title="Attach files"
-            >
-              <Paperclip className="w-5 h-5" />
-            </Button>
             <Button
               onClick={handleSendMessage}
-              disabled={isLoading || (!currentMessage.trim() && attachments.length === 0) || !isConfigured}
+              disabled={isLoading || !currentMessage.trim() || !isConfigured}
               className="flex-1 sm:flex-none px-6 py-3 bg-primary hover:bg-blue-700"
             >
               <Send className="w-5 h-5" />
