@@ -127,8 +127,6 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       return;
     }
 
-        : "";
-
     // Clear input
     setCurrentMessage("");
     setIsLoading(true);
