@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,6 +14,7 @@ export function NotesPanel() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<number | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [showPreview, setShowPreview] = useState(true);
 
   const { data: notes = [] } = useQuery<Note[]>({
     queryKey: NOTES_QUERY_KEY,
@@ -202,14 +204,30 @@ export function NotesPanel() {
         </div>
         {activeNote ? (
           <>
-            {(createdLabel || activeNote.summary) && (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {createdLabel && <span>Создано: {createdLabel}</span>}
-                {activeNote.summary && <span>Описание: {activeNote.summary}</span>}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {createdLabel && <span>Created: {createdLabel}</span>}
+              {activeNote.summary && <span>Summary: {activeNote.summary}</span>}
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowPreview((prev) => !prev)}
+                className="h-7 px-2"
+              >
+                {showPreview ? "Hide preview" : "Show preview"}
+              </Button>
+            </div>
+            {showPreview && (
+              <div className="markdown-content max-h-[40vh] overflow-y-auto rounded-md border border-border bg-card/50 p-3 text-sm">
+                {draftContent.trim().length === 0 ? (
+                  <div className="text-xs text-muted-foreground">No content to preview.</div>
+                ) : (
+                  <ReactMarkdown>{draftContent}</ReactMarkdown>
+                )}
               </div>
             )}
             <Textarea
-              placeholder="Ваши заметки..."
+              placeholder="Write a note..."
               value={draftContent}
               onChange={(event) => setDraftContent(event.target.value)}
               className="flex-1 resize-none"
