@@ -128,9 +128,10 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
   });
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024;
-  const MAX_TOTAL_BYTES = 900 * 1024;
-  const MAX_IMAGE_BYTES = 512 * 1024;
-  const MAX_TEXT_CHARS = 100000;
+  const MAX_TOTAL_BYTES = 200 * 1024;
+  const MAX_IMAGE_BYTES = 150 * 1024;
+  const MAX_TEXT_CHARS = 20000;
+  const MAX_REQUEST_BYTES = 200 * 1024;
   const textEncoder = new TextEncoder();
 
   const readFileAsText = (file: File) =>
@@ -178,7 +179,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       if (totalBytes + file.size > MAX_TOTAL_BYTES) {
         toast({
           title: "Attachments too large",
-          description: "Total attachment size exceeds 900KB.",
+          description: "Total attachment size exceeds 200KB.",
           variant: "destructive",
         });
         break;
@@ -189,7 +190,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           if (file.size > MAX_IMAGE_BYTES) {
             toast({
               title: "Image too large",
-              description: `${file.name} exceeds the 512KB limit.`,
+              description: `${file.name} exceeds the 150KB limit.`,
               variant: "destructive",
             });
             continue;
@@ -200,7 +201,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
             toast({
               title: "Attachments too large",
-              description: "Total attachment size exceeds 900KB.",
+              description: "Total attachment size exceeds 200KB.",
               variant: "destructive",
             });
             continue;
@@ -234,7 +235,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
             toast({
               title: "Attachments too large",
-              description: "Total attachment size exceeds 900KB.",
+              description: "Total attachment size exceeds 200KB.",
               variant: "destructive",
             });
             continue;
@@ -258,7 +259,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
         if (totalBytes + payloadSize > MAX_TOTAL_BYTES) {
           toast({
             title: "Attachments too large",
-            description: "Total attachment size exceeds 900KB.",
+            description: "Total attachment size exceeds 200KB.",
             variant: "destructive",
           });
           continue;
@@ -332,8 +333,15 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       content: `${content}${attachmentSummary}`.trim(),
     });
 
-    const trimmedMessages =
-      attachments.length > 0 ? conversationMessages.slice(-6) : conversationMessages;
+    const attachmentBytes = attachments.reduce((sum, item) => sum + item.sizeBytes, 0);
+    const budget = Math.max(8 * 1024, MAX_REQUEST_BYTES - attachmentBytes);
+    const trimmedMessages = trimMessagesByBytes(conversationMessages, budget);
+    if (trimmedMessages.length < conversationMessages.length) {
+      toast({
+        title: "Context trimmed",
+        description: "Previous messages were shortened to fit the request size.",
+      });
+    }
 
     // Send to LLM
     chatMutation.mutate({
@@ -341,6 +349,22 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       systemPrompt: activePrompt?.content,
       attachments: attachments.map(({ id, sizeBytes, ...rest }) => rest),
     });
+
+  const trimMessagesByBytes = (
+    messagesList: Array<{ role: string; content: string }>,
+    maxBytes: number,
+  ) => {
+    let total = 0;
+    const trimmed: Array<{ role: string; content: string }> = [];
+    for (let i = messagesList.length - 1; i >= 0; i -= 1) {
+      const entry = messagesList[i];
+      const size = textEncoder.encode(entry.content ?? "").length + 16;
+      if (total + size > maxBytes) break;
+      trimmed.push(entry);
+      total += size;
+    }
+    return trimmed.reverse();
+  };
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -445,7 +469,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       </div>
 
       <div className="border-t border-border p-3 sm:p-4 bg-card">
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
+        <div className="flex flex-col sm:flex-row gap-3 items-start">
           <div className="flex-1">
             <Textarea
               placeholder="Type your message..."
@@ -476,7 +500,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
               </div>
             )}
           </div>
-          <div className="flex flex-row sm:flex-col gap-2 sm:items-start">
+          <div className="flex flex-row sm:flex-col gap-2 self-start">
             <input
               ref={fileInputRef}
               type="file"
