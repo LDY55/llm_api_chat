@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trash2, Plus, FileText } from "lucide-react";
@@ -13,6 +14,7 @@ export function NotesPanel() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<number | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: notes = [] } = useQuery<Note[]>({
     queryKey: NOTES_QUERY_KEY,
@@ -22,6 +24,17 @@ export function NotesPanel() {
     () => notes.find((note) => note.id === activeId) ?? null,
     [notes, activeId]
   );
+
+  const filteredNotes = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return notes;
+    return notes.filter((note) => {
+      const haystack = [note.title, note.content, note.summary ?? ""]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [notes, searchQuery]);
 
   const createdLabel = useMemo(() => {
     if (!activeNote) return "";
@@ -120,7 +133,7 @@ export function NotesPanel() {
 
   return (
     <div className="flex h-full flex-1 overflow-hidden">
-      <aside className="w-64 border-r border-border bg-card p-3">
+      <aside className="flex w-64 flex-col border-r border-border bg-card p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs text-muted-foreground">Заметки (JSON)</div>
           <Button
@@ -133,11 +146,20 @@ export function NotesPanel() {
             Новая
           </Button>
         </div>
-        <div className="mt-3 space-y-2 overflow-y-auto pr-1">
-          {notes.length === 0 && (
+        <div className="mt-3">
+          <Input
+            type="text"
+            placeholder="Search notes..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
+          {filteredNotes.length === 0 && (
             <div className="text-xs text-muted-foreground">Пока нет заметок</div>
           )}
-          {notes.map((note) => {
+          {filteredNotes.map((note) => {
             const content = (
               <button
                 type="button"
