@@ -14,7 +14,8 @@ import crypto from "node:crypto";
 const DEFAULT_CONFIG_FILE = path.join(process.cwd(), "api-config.json");
 const GOOGLE_CONFIG_FILE = path.join(process.cwd(), "google-api-config.json");
 const PROMPTS_FILE = path.join(process.cwd(), "system-prompts.json");
-const NOTES_FILE = path.join(process.cwd(), "notes.json");
+const NOTES_FILE = path.join(process.cwd(), "data", "notes.json");
+const LEGACY_NOTES_FILE = path.join(process.cwd(), "notes.json");
 const USAGE_FILE = path.join(process.cwd(), "data", "api-usage.json");
 
 export interface IStorage {
@@ -134,6 +135,14 @@ export class MemStorage implements IStorage {
 
   private loadNotes(): void {
     try {
+      if (!fs.existsSync(NOTES_FILE) && fs.existsSync(LEGACY_NOTES_FILE)) {
+        const legacyRaw = fs.readFileSync(LEGACY_NOTES_FILE, "utf8");
+        const dir = path.dirname(NOTES_FILE);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(NOTES_FILE, legacyRaw, "utf8");
+      }
       if (fs.existsSync(NOTES_FILE)) {
         const raw = fs.readFileSync(NOTES_FILE, "utf8");
         const data = JSON.parse(raw) as Note[];
@@ -201,6 +210,10 @@ export class MemStorage implements IStorage {
 
   private persistNotes(): void {
     try {
+      const dir = path.dirname(NOTES_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       fs.writeFileSync(
         NOTES_FILE,
         JSON.stringify(Array.from(this.notes.values()), null, 2),

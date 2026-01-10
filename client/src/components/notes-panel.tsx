@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -206,13 +205,6 @@ export function NotesPanel() {
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {createdLabel && <span>Created: {createdLabel}</span>}
               {activeNote.summary && <span>Summary: {activeNote.summary}</span>}
-            </div>
-            <div className="markdown-content max-h-[40vh] overflow-y-auto rounded-md border border-border bg-card/50 p-3 text-sm">
-              {draftContent.trim().length === 0 ? (
-                <div className="text-xs text-muted-foreground">No content.</div>
-              ) : (
-                <ReactMarkdown>{draftContent}</ReactMarkdown>
-              )}
             </div>
             <Textarea
               placeholder="Write a note..."

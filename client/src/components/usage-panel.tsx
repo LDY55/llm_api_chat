@@ -47,11 +47,11 @@ export function UsagePanel() {
   const configOptions = useMemo<ConfigOption[]>(() => {
     const options: ConfigOption[] = [{ id: "all", label: "All configs" }];
     const custom = (customConfigs?.configs ?? []).map((cfg) => ({
-      id: String(cfg.id),
+      id: `custom:${cfg.id}`,
       label: `${cfg.name} (Custom)`,
     }));
     const google = (googleConfigs?.configs ?? []).map((cfg) => ({
-      id: String(cfg.id),
+      id: `google:${cfg.id}`,
       label: `${cfg.name} (Google)`,
     }));
     const hasUnknown = rows.some((row) => typeof row.configId !== "number");
@@ -68,9 +68,15 @@ export function UsagePanel() {
     if (selectedConfig === "unknown") {
       return rows.filter((row) => typeof row.configId !== "number");
     }
-    const id = Number(selectedConfig);
+    const [scope, rawId] = selectedConfig.split(":");
+    const id = Number(rawId);
     if (!Number.isFinite(id)) return rows;
-    return rows.filter((row) => row.configId === id);
+    return rows.filter((row) => {
+      if (row.configId !== id) return false;
+      if (scope === "google") return row.useGoogle === true;
+      if (scope === "custom") return row.useGoogle === false;
+      return true;
+    });
   }, [rows, selectedConfig]);
 
   if (filteredRows.length === 0) {
