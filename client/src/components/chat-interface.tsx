@@ -127,6 +127,8 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
   });
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 2 * 1024 * 1024;
+  const MAX_IMAGE_BYTES = 1 * 1024 * 1024;
   const MAX_TEXT_CHARS = 100000;
 
   const readFileAsText = (file: File) =>
@@ -159,6 +161,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     event.target.value = "";
 
     const next: typeof attachments = [];
+    let totalBytes = attachments.reduce((sum, item) => sum + (item.data ? item.data.length : 0), 0);
 
     for (const file of files) {
       if (file.size > MAX_FILE_BYTES) {
@@ -170,8 +173,33 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
         continue;
       }
 
+      if (totalBytes + file.size > MAX_TOTAL_BYTES) {
+        toast({
+          title: "Attachments too large",
+          description: "Total attachment size exceeds 2MB.",
+          variant: "destructive",
+        });
+        break;
+      }
+
       try {
         if (file.type.startsWith("image/")) {
+          if (!googleMode) {
+            toast({
+              title: "Images not supported",
+              description: "Image uploads are only supported in Google mode.",
+              variant: "destructive",
+            });
+            continue;
+          }
+          if (file.size > MAX_IMAGE_BYTES) {
+            toast({
+              title: "Image too large",
+              description: `${file.name} exceeds the 1MB limit.`,
+              variant: "destructive",
+            });
+            continue;
+          }
           const dataUrl = await readFileAsDataURL(file);
           const base64 = dataUrl.split(",")[1] ?? "";
           next.push({
@@ -181,6 +209,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
             mimeType: file.type || "application/octet-stream",
             data: base64,
           });
+          totalBytes += file.size;
           continue;
         }
 
@@ -204,6 +233,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
             mimeType: "text/csv",
             text,
           });
+          totalBytes += file.size;
           continue;
         }
 
@@ -217,6 +247,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
           mimeType: file.type || "text/plain",
           text: normalized,
         });
+        totalBytes += file.size;
       } catch (error) {
         console.error("Failed to read file", error);
         toast({
@@ -387,7 +418,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       </div>
 
       <div className="border-t border-border p-3 sm:p-4 bg-card">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
           <div className="flex-1">
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2">
@@ -418,7 +449,7 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
               className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
             />
           </div>
-          <div className="flex flex-row sm:flex-col gap-2">
+          <div className="flex flex-row sm:flex-col gap-2 sm:items-start">
             <input
               ref={fileInputRef}
               type="file"
