@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ export function NotesPanel() {
   const queryClient = useQueryClient();
   const [activeId, setActiveId] = useState<number | null>(null);
   const [draftContent, setDraftContent] = useState("");
+  const [activeLineIndex, setActiveLineIndex] = useState<number | null>(0);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: notes = [] } = useQuery<Note[]>({
@@ -103,8 +105,10 @@ export function NotesPanel() {
   useEffect(() => {
     if (activeNote) {
       setDraftContent(activeNote.content);
+      setActiveLineIndex(0);
     } else {
       setDraftContent("");
+      setActiveLineIndex(null);
     }
   }, [activeNote?.id]);
 
@@ -123,6 +127,26 @@ export function NotesPanel() {
       const remaining = notes.filter((note) => note.id !== id);
       setActiveId(remaining[0]?.id ?? null);
     }
+  };
+
+  const lines = useMemo(() => draftContent.split("\n"), [draftContent]);
+
+  const updateLine = (index: number, value: string) => {
+    setDraftContent((prev) => {
+      const parts = prev.split("\n");
+      while (parts.length <= index) parts.push("");
+      parts[index] = value;
+      return parts.join("\n");
+    });
+  };
+
+  const insertLineAfter = (index: number) => {
+    setDraftContent((prev) => {
+      const parts = prev.split("\n");
+      parts.splice(index + 1, 0, "");
+      return parts.join("\n");
+    });
+    setActiveLineIndex(index + 1);
   };
 
   const handleClearAll = () => {
@@ -228,12 +252,50 @@ export function NotesPanel() {
               {createdLabel && <span>Created: {createdLabel}</span>}
               {activeNote.summary && <span>Summary: {activeNote.summary}</span>}
             </div>
-            <Textarea
-              placeholder="Write a note..."
-              value={draftContent}
-              onChange={(event) => setDraftContent(event.target.value)}
-              className="flex-1 resize-none"
-            />
+            <div className="flex-1 overflow-y-auto rounded-md border border-border bg-background p-3">
+              {lines.map((line, index) => {
+                const isActive = index === activeLineIndex;
+                return (
+                  <div
+                    key={index}
+                    className={`rounded-md px-2 py-1 ${isActive ? "bg-muted/60" : "hover:bg-muted/30"}`}
+                  >
+                    {isActive ? (
+                      <Textarea
+                        autoFocus
+                        rows={1}
+                        placeholder="Write a note..."
+                        value={line}
+                        onChange={(event) => updateLine(index, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            insertLineAfter(index);
+                          }
+                        }}
+                        className="min-h-[2rem] resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setActiveLineIndex(index)}
+                        className="w-full text-left text-sm"
+                      >
+                        {line.trim() ? (
+                          <div className="markdown-content text-sm [&_p]:mb-0 [&_ol]:mb-0 [&_ul]:mb-0 [&_li]:mb-0">
+                            <ReactMarkdown>{line}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Click to edit line...
+                          </span>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
