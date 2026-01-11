@@ -117,6 +117,49 @@
   color: inherit;
 }
 
+.markdown-content .hljs {
+  color: hsl(210, 40%, 92%);
+}
+
+.markdown-content .hljs-comment,
+.markdown-content .hljs-quote {
+  color: hsl(210, 16%, 60%);
+  font-style: italic;
+}
+
+.markdown-content .hljs-keyword,
+.markdown-content .hljs-selector-tag,
+.markdown-content .hljs-literal,
+.markdown-content .hljs-title,
+.markdown-content .hljs-section {
+  color: hsl(197, 96%, 70%);
+}
+
+.markdown-content .hljs-string,
+.markdown-content .hljs-doctag,
+.markdown-content .hljs-regexp,
+.markdown-content .hljs-addition {
+  color: hsl(120, 58%, 70%);
+}
+
+.markdown-content .hljs-number,
+.markdown-content .hljs-built_in,
+.markdown-content .hljs-variable,
+.markdown-content .hljs-template-variable {
+  color: hsl(32, 90%, 70%);
+}
+
+.markdown-content .hljs-type,
+.markdown-content .hljs-class,
+.markdown-content .hljs-function,
+.markdown-content .hljs-name {
+  color: hsl(280, 80%, 75%);
+}
+
+.markdown-content .hljs-deletion {
+  color: hsl(0, 72%, 70%);
+}
+
 .markdown-content blockquote {
   border-left: 4px solid hsl(210, 40%, 85%);
   padding-left: 1rem;
