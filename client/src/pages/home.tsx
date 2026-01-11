@@ -17,7 +17,7 @@ export default function Home() {
   const { data: session, isLoading: sessionLoading } = useSession();
   const [configExpanded, setConfigExpanded] = useState(true);
   const [activePrompt, setActivePrompt] = useState<SystemPrompt | null>(null);
-  const [googleMode, setGoogleMode] = useState(false);
+  const [googleMode, setGoogleMode] = useState(true);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "notes" | "usage">("chat");
   const isMobile = useIsMobile();
