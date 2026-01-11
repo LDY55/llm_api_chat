@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,32 @@ export function NotesPanel() {
 
   const lines = useMemo(() => draftContent.split("\n"), [draftContent]);
 
+  const blocks = useMemo(() => {
+    const results: Array<{ type: "line" | "table"; start: number; end: number }> = [];
+    const isTableSeparator = (value: string) =>
+      /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(value);
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i] ?? "";
+      const next = lines[i + 1] ?? "";
+      if (line.includes("|") && isTableSeparator(next)) {
+        const start = i;
+        let end = i + 1;
+        i += 2;
+        while (i < lines.length && lines[i].trim() !== "" && lines[i].includes("|")) {
+          end = i;
+          i += 1;
+        }
+        results.push({ type: "table", start, end });
+        continue;
+      }
+      results.push({ type: "line", start: i, end: i });
+      i += 1;
+    }
+    return results;
+  }, [lines]);
+
   const updateLine = (index: number, value: string) => {
     setDraftContent((prev) => {
       const parts = prev.split("\n");
@@ -138,6 +165,22 @@ export function NotesPanel() {
       parts[index] = value;
       return parts.join("\n");
     });
+  };
+
+  const removeLine = (index: number, nextIndex: number) => {
+    setDraftContent((prev) => {
+      const parts = prev.split("\n");
+      if (parts.length <= 1) {
+        return "";
+      }
+      parts.splice(index, 1);
+      return parts.join("\n");
+    });
+    const clamped =
+      lines.length <= 1
+        ? 0
+        : Math.max(0, Math.min(nextIndex, lines.length - 2));
+    setActiveLineIndex(clamped);
   };
 
   const insertLineAfter = (index: number) => {
@@ -253,12 +296,138 @@ export function NotesPanel() {
               {activeNote.summary && <span>Summary: {activeNote.summary}</span>}
             </div>
             <div className="flex-1 overflow-y-auto rounded-md border border-border bg-background p-3">
-              {lines.map((line, index) => {
+              {blocks.map((block) => {
+                if (block.type === "table") {
+                  const isActive =
+                    activeLineIndex !== null &&
+                    activeLineIndex >= block.start &&
+                    activeLineIndex <= block.end;
+
+                  if (isActive) {
+                    const tableLines = lines.slice(block.start, block.end + 1);
+                    return (
+                      <div key={`table-${block.start}`} className="space-y-1">
+                        {tableLines.map((line, offset) => {
+                          const index = block.start + offset;
+                          const isLineActive = index === activeLineIndex;
+                          return (
+                            <div
+                              key={index}
+                              className={`rounded-md px-2 py-1 ${isLineActive ? "bg-muted/60" : "hover:bg-muted/30"}`}
+                              onClick={() => setActiveLineIndex(index)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setActiveLineIndex(index);
+                                }
+                              }}
+                            >
+                              {isLineActive ? (
+                                <Textarea
+                                  autoFocus
+                                  rows={1}
+                                  placeholder="Write a note..."
+                                  value={line}
+                                  onChange={(event) => updateLine(index, event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" && !event.shiftKey) {
+                                      event.preventDefault();
+                                      insertLineAfter(index);
+                                      return;
+                                    }
+                                    if (event.key === "Backspace" && line.trim() === "") {
+                                      event.preventDefault();
+                                      removeLine(index, index - 1);
+                                      return;
+                                    }
+                                    if (event.key === "Delete" && line.trim() === "") {
+                                      event.preventDefault();
+                                      removeLine(index, index);
+                                      return;
+                                    }
+                                  }}
+                                  className="min-h-[2rem] resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                                />
+                              ) : (
+                                <span className="text-sm">{line || " "}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  const tableContent = lines.slice(block.start, block.end + 1).join("\n");
+                  return (
+                    <div
+                      key={`table-${block.start}`}
+                      className="rounded-md px-2 py-1 hover:bg-muted/30"
+                      onClick={() => setActiveLineIndex(block.start)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveLineIndex(block.start);
+                        }
+                      }}
+                    >
+                      <div className="markdown-content text-sm">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            input: ({ node, ...props }) => {
+                              const lineNumber = node.position?.start?.line ?? 1;
+                              const lineIndex = block.start + lineNumber - 1;
+                              const toggle = (checked: boolean) => {
+                                const current = lines[lineIndex] ?? "";
+                                const next = current.replace(
+                                  /\[( |x|X)\]/,
+                                  checked ? "[x]" : "[ ]"
+                                );
+                                updateLine(lineIndex, next);
+                              };
+                              return (
+                                <input
+                                  {...props}
+                                  type="checkbox"
+                                  disabled={false}
+                                  readOnly={false}
+                                  checked={Boolean(props.checked)}
+                                  onMouseDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) => toggle(event.target.checked)}
+                                />
+                              );
+                            },
+                          }}
+                        >
+                          {tableContent}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const index = block.start;
+                const line = lines[index] ?? "";
                 const isActive = index === activeLineIndex;
                 return (
                   <div
                     key={index}
                     className={`rounded-md px-2 py-1 ${isActive ? "bg-muted/60" : "hover:bg-muted/30"}`}
+                    onClick={() => setActiveLineIndex(index)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setActiveLineIndex(index);
+                      }
+                    }}
                   >
                     {isActive ? (
                       <Textarea
@@ -271,26 +440,57 @@ export function NotesPanel() {
                           if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault();
                             insertLineAfter(index);
+                            return;
+                          }
+                          if (event.key === "Backspace" && line.trim() === "") {
+                            event.preventDefault();
+                            removeLine(index, index - 1);
+                            return;
+                          }
+                          if (event.key === "Delete" && line.trim() === "") {
+                            event.preventDefault();
+                            removeLine(index, index);
+                            return;
                           }
                         }}
                         className="min-h-[2rem] resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                       />
+                    ) : line.trim() ? (
+                      <div className="markdown-content text-sm [&_p]:mb-0 [&_ol]:mb-0 [&_ul]:mb-0 [&_li]:mb-0">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            input: ({ node, ...props }) => {
+                              const lineNumber = node.position?.start?.line ?? 1;
+                              const lineIndex = index + lineNumber - 1;
+                              const toggle = (checked: boolean) => {
+                                const current = lines[lineIndex] ?? "";
+                                const next = current.replace(
+                                  /\[( |x|X)\]/,
+                                  checked ? "[x]" : "[ ]"
+                                );
+                                updateLine(lineIndex, next);
+                              };
+                              return (
+                                <input
+                                  {...props}
+                                  type="checkbox"
+                                  disabled={false}
+                                  readOnly={false}
+                                  checked={Boolean(props.checked)}
+                                  onMouseDown={(event) => event.stopPropagation()}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) => toggle(event.target.checked)}
+                                />
+                              );
+                            },
+                          }}
+                        >
+                          {line}
+                        </ReactMarkdown>
+                      </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setActiveLineIndex(index)}
-                        className="w-full text-left text-sm"
-                      >
-                        {line.trim() ? (
-                          <div className="markdown-content text-sm [&_p]:mb-0 [&_ol]:mb-0 [&_ul]:mb-0 [&_li]:mb-0">
-                            <ReactMarkdown>{line}</ReactMarkdown>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Click to edit line...
-                          </span>
-                        )}
-                      </button>
+                      <span className="text-xs text-muted-foreground">Click to edit line...</span>
                     )}
                   </div>
                 );

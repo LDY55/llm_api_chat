@@ -125,6 +125,41 @@
   color: hsl(210, 20%, 55%);
 }
 
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid hsl(210, 16%, 86%);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content thead th {
+  background-color: hsl(210, 40%, 96%);
+  font-weight: 600;
+}
+
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5rem;
+  transform: translateY(1px);
+}
+
+.markdown-content ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-content li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
 /* Line clamping utility */
 .line-clamp-2 {
   display: -webkit-box;
