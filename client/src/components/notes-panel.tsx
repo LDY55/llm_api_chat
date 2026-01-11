@@ -43,6 +43,7 @@ export function NotesPanel() {
     open: boolean;
   }>({ content: "", x: 0, y: 0, open: false });
   const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef<{ text: string; rect: DOMRect } | null>(null);
 
   const { data: notes = [] } = useQuery<Note[]>({
     queryKey: NOTES_QUERY_KEY,
@@ -218,6 +219,15 @@ export function NotesPanel() {
     return rect ? { text, rect } : null;
   };
 
+  const getSelectionPayload = () => getSelectionInfo() ?? selectionRef.current;
+
+  const updateSelectionCache = () => {
+    const info = getSelectionInfo();
+    if (info) {
+      selectionRef.current = info;
+    }
+  };
+
   const showBubble = (content: string, rect: DOMRect) => {
     const x = Math.max(12, Math.min(rect.left, window.innerWidth - 280));
     const y = Math.min(rect.bottom + 8, window.innerHeight - 80);
@@ -226,7 +236,7 @@ export function NotesPanel() {
 
   const translateSelectionMutation = useMutation({
     mutationFn: async () => {
-      const selection = getSelectionInfo();
+      const selection = getSelectionPayload();
       if (!selection) return { text: "", rect: null as DOMRect | null };
       const text = selection.text;
       const rect = selection.rect;
@@ -260,15 +270,20 @@ export function NotesPanel() {
 
   const explainSelectionMutation = useMutation({
     mutationFn: async () => {
-      const selection = getSelectionInfo();
+      const selection = getSelectionPayload();
       if (!selection) return { text: "", rect: null as DOMRect | null };
       const text = selection.text;
       const rect = selection.rect;
+      const isSingleWord = !/\s/.test(text.trim());
+      const isAbbreviation = /^[A-ZА-ЯЁ]{2,}$/.test(text.trim()) || /^(?:[A-ZА-ЯЁ]\.){2,}$/.test(text.trim());
+      const systemPrompt = isSingleWord
+        ? isAbbreviation
+          ? "Дай краткие варианты расшифровки аббревиатуры. Верни только список вариантов."
+          : "Дай краткое определение одного слова. Верни только определение."
+        : "Кратко поясни выделенный фрагмент простыми словами. Не меняй смысл. Верни только пояснение.";
       const response = await apiRequest("POST", "/api/chat?google=true", {
         messages: [{ role: "user", content: text }],
-        systemPrompt:
-          "Кратко поясни выделенный фрагмент простыми словами. " +
-          "Не меняй смысл. Верни только пояснение.",
+        systemPrompt,
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -578,7 +593,7 @@ export function NotesPanel() {
                     size="icon"
                     variant="secondary"
                     onClick={() => {
-                      const selection = getSelectionInfo();
+                      const selection = getSelectionPayload();
                       if (!selection) {
                         alert("Выделите текст для перевода.");
                         return;
@@ -600,7 +615,7 @@ export function NotesPanel() {
                     size="icon"
                     variant="secondary"
                     onClick={() => {
-                      const selection = getSelectionInfo();
+                      const selection = getSelectionPayload();
                       if (!selection) {
                         alert("Выделите текст для пояснения.");
                         return;
@@ -636,6 +651,8 @@ export function NotesPanel() {
               <div
                 ref={previewRef}
                 onClick={handlePreviewClick}
+                onMouseUp={updateSelectionCache}
+                onKeyUp={updateSelectionCache}
                 className="markdown-content flex-1 overflow-y-auto rounded-md border border-border bg-background p-3 text-sm"
               >
                 <ReactMarkdown
@@ -666,6 +683,8 @@ export function NotesPanel() {
                 onChange={(event) => setDraftContent(event.target.value)}
                 className="flex-1 resize-none"
                 ref={textareaRef}
+                onMouseUp={updateSelectionCache}
+                onKeyUp={updateSelectionCache}
               />
             )}
           </>
