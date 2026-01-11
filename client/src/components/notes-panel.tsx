@@ -133,13 +133,30 @@ export function NotesPanel() {
   const lines = useMemo(() => draftContent.split("\n"), [draftContent]);
 
   const blocks = useMemo(() => {
-    const results: Array<{ type: "line" | "table"; start: number; end: number }> = [];
+    const results: Array<{ type: "line" | "table" | "code"; start: number; end: number }> = [];
     const isTableSeparator = (value: string) =>
       /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(value);
+    const isFence = (value: string) => /^\s*```/.test(value);
 
     let i = 0;
     while (i < lines.length) {
       const line = lines[i] ?? "";
+      if (isFence(line)) {
+        const start = i;
+        let end = i;
+        i += 1;
+        while (i < lines.length) {
+          end = i;
+          if (isFence(lines[i] ?? "")) {
+            i += 1;
+            break;
+          }
+          i += 1;
+        }
+        results.push({ type: "code", start, end });
+        continue;
+      }
+
       const next = lines[i + 1] ?? "";
       if (line.includes("|") && isTableSeparator(next)) {
         const start = i;
@@ -152,6 +169,7 @@ export function NotesPanel() {
         results.push({ type: "table", start, end });
         continue;
       }
+
       results.push({ type: "line", start: i, end: i });
       i += 1;
     }
@@ -297,6 +315,93 @@ export function NotesPanel() {
             </div>
             <div className="flex-1 overflow-y-auto rounded-md border border-border bg-background p-3">
               {blocks.map((block) => {
+                if (block.type === "code") {
+                  const isActive =
+                    activeLineIndex !== null &&
+                    activeLineIndex >= block.start &&
+                    activeLineIndex <= block.end;
+
+                  if (isActive) {
+                    const codeLines = lines.slice(block.start, block.end + 1);
+                    return (
+                      <div key={`code-${block.start}`} className="space-y-1">
+                        {codeLines.map((line, offset) => {
+                          const index = block.start + offset;
+                          const isLineActive = index === activeLineIndex;
+                          return (
+                            <div
+                              key={index}
+                              className={`rounded-md px-2 py-1 ${isLineActive ? "bg-muted/60" : "hover:bg-muted/30"}`}
+                              onClick={() => setActiveLineIndex(index)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setActiveLineIndex(index);
+                                }
+                              }}
+                            >
+                              {isLineActive ? (
+                                <Textarea
+                                  autoFocus
+                                  rows={1}
+                                  placeholder="Write a note..."
+                                  value={line}
+                                  onChange={(event) => updateLine(index, event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" && !event.shiftKey) {
+                                      event.preventDefault();
+                                      insertLineAfter(index);
+                                      return;
+                                    }
+                                    if (event.key === "Backspace" && line.trim() === "") {
+                                      event.preventDefault();
+                                      removeLine(index, index - 1);
+                                      return;
+                                    }
+                                    if (event.key === "Delete" && line.trim() === "") {
+                                      event.preventDefault();
+                                      removeLine(index, index);
+                                      return;
+                                    }
+                                  }}
+                                  className="min-h-[2rem] resize-none border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                                />
+                              ) : (
+                                <span className="text-sm">{line || " "}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  const codeContent = lines.slice(block.start, block.end + 1).join("\n");
+                  return (
+                    <div
+                      key={`code-${block.start}`}
+                      className="rounded-md px-2 py-1 hover:bg-muted/30"
+                      onClick={() => setActiveLineIndex(block.start)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveLineIndex(block.start);
+                        }
+                      }}
+                    >
+                      <div className="markdown-content text-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {codeContent}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  );
+                }
+
                 if (block.type === "table") {
                   const isActive =
                     activeLineIndex !== null &&
@@ -397,6 +502,8 @@ export function NotesPanel() {
                                   disabled={false}
                                   readOnly={false}
                                   checked={Boolean(props.checked)}
+                                  className="cursor-pointer"
+                                  onPointerDown={(event) => event.stopPropagation()}
                                   onMouseDown={(event) => event.stopPropagation()}
                                   onClick={(event) => event.stopPropagation()}
                                   onChange={(event) => toggle(event.target.checked)}
@@ -478,6 +585,8 @@ export function NotesPanel() {
                                   disabled={false}
                                   readOnly={false}
                                   checked={Boolean(props.checked)}
+                                  className="cursor-pointer"
+                                  onPointerDown={(event) => event.stopPropagation()}
                                   onMouseDown={(event) => event.stopPropagation()}
                                   onClick={(event) => event.stopPropagation()}
                                   onChange={(event) => toggle(event.target.checked)}
