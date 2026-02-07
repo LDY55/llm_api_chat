@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Trash2, Loader2 } from "lucide-react";
+import { Send, Trash2, Loader2, Copy, Check, GripHorizontal } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { SystemPrompt, ApiConfiguration, ChatMessage } from "@shared/schema";
 import type { LLMResponse, ChatRequest } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
+import rehypeHighlight from "rehype-highlight";
 
 interface ChatInterfaceProps {
   activePrompt: SystemPrompt | null;
@@ -15,10 +18,20 @@ interface ChatInterfaceProps {
   googleMode: boolean;
 }
 
+const MIN_INPUT_HEIGHT = 84;
+const DEFAULT_INPUT_HEIGHT = 120;
+const MAX_INPUT_HEIGHT = 360;
+
 export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfaceProps) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [inputHeight, setInputHeight] = useState(DEFAULT_INPUT_HEIGHT);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const copyResetTimeoutRef = useRef<number | null>(null);
+  const isResizingInputRef = useRef(false);
+  const resizeStartYRef = useRef(0);
+  const resizeStartHeightRef = useRef(DEFAULT_INPUT_HEIGHT);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -169,10 +182,97 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
     }
   };
 
+  const handleCopyMessage = async (message: ChatMessage) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(message.content);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = message.content;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+
+      setCopiedMessageId(message.id);
+      if (copyResetTimeoutRef.current) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+      copyResetTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMessageId(null);
+      }, 1500);
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy message",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const clampInputHeight = useCallback((height: number) => {
+    return Math.max(MIN_INPUT_HEIGHT, Math.min(MAX_INPUT_HEIGHT, height));
+  }, []);
+
+  const handleInputResize = useCallback((event: MouseEvent) => {
+    if (!isResizingInputRef.current) return;
+    const delta = resizeStartYRef.current - event.clientY;
+    const nextHeight = clampInputHeight(resizeStartHeightRef.current + delta);
+    setInputHeight(nextHeight);
+  }, [clampInputHeight]);
+
+  const stopInputResize = useCallback(() => {
+    isResizingInputRef.current = false;
+    window.removeEventListener("mousemove", handleInputResize);
+    window.removeEventListener("mouseup", stopInputResize);
+  }, [handleInputResize]);
+
+  const startInputResize = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    isResizingInputRef.current = true;
+    resizeStartYRef.current = event.clientY;
+    resizeStartHeightRef.current = inputHeight;
+
+    window.addEventListener("mousemove", handleInputResize);
+    window.addEventListener("mouseup", stopInputResize);
+  }, [handleInputResize, inputHeight, stopInputResize]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const savedHeight = window.localStorage.getItem("chat-input-height");
+    if (!savedHeight) return;
+
+    const parsedHeight = Number(savedHeight);
+    if (!Number.isFinite(parsedHeight)) return;
+    setInputHeight(clampInputHeight(parsedHeight));
+  }, [clampInputHeight]);
+
+  useEffect(() => {
+    window.localStorage.setItem("chat-input-height", String(inputHeight));
+  }, [inputHeight]);
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("mousemove", handleInputResize);
+      window.removeEventListener("mouseup", stopInputResize);
+    };
+  }, [handleInputResize, stopInputResize]);
 
   // Reset chat when model, Google mode, or system prompt changes
   const prevModelRef = useRef<string | null>(null);
@@ -213,20 +313,60 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
             }`}
           >
             <div
-              className={`max-w-[90%] sm:max-w-3xl px-4 py-3 rounded-2xl ${
+              className={`group relative max-w-[90%] sm:max-w-3xl px-4 py-3 rounded-2xl ${
                 message.role === "user"
                   ? "bg-primary text-white rounded-br-md"
                   : "bg-card border border-border rounded-bl-md shadow-sm"
               }`}
             >
-              <div className={`text-sm ${message.role === "user" ? "text-white" : "text-foreground"}`}>
-                {message.role === "user" ? (
-                  message.content
+              <button
+                type="button"
+                onClick={() => handleCopyMessage(message)}
+                className={`absolute right-2 top-2 rounded-md p-1.5 transition-opacity ${
+                  message.role === "user"
+                    ? "text-white/80 hover:text-white hover:bg-white/15"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                } opacity-100 sm:opacity-0 sm:group-hover:opacity-100`}
+                title="Copy message"
+                aria-label="Copy message"
+              >
+                {copiedMessageId === message.id ? (
+                  <Check className="h-4 w-4" />
                 ) : (
-                  <div className="markdown-content">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  </div>
+                  <Copy className="h-4 w-4" />
                 )}
+              </button>
+              <div
+                className={`text-sm pr-8 ${
+                  message.role === "user" ? "text-white" : "text-foreground"
+                }`}
+              >
+                <div
+                  className={`chat-markdown markdown-content ${
+                    message.role === "user" ? "markdown-content-user" : ""
+                  }`}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    rehypePlugins={[rehypeHighlight]}
+                    components={{
+                      input: ({ checked, ...props }) => {
+                        return (
+                          <input
+                            {...props}
+                            type="checkbox"
+                            disabled={false}
+                            readOnly
+                            defaultChecked={Boolean(checked)}
+                            className="cursor-pointer"
+                          />
+                        );
+                      },
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                </div>
               </div>
               <div className={`text-xs mt-2 ${
                 message.role === "user" ? "opacity-75" : "text-muted-foreground"
@@ -260,15 +400,28 @@ export function ChatInterface({ activePrompt, config, googleMode }: ChatInterfac
       <div className="border-t border-border p-3 sm:p-4 bg-card">
         <div className="flex flex-col sm:flex-row gap-3 items-start">
           <div className="flex-1">
-            <Textarea
-              placeholder="Type your message..."
-              rows={3}
-              value={currentMessage}
-              onChange={(e) => setCurrentMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              className="resize-none focus:ring-2 focus:ring-primary focus:border-primary"
-            />
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onMouseDown={startInputResize}
+                className="flex h-4 w-full items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:text-foreground cursor-row-resize"
+                title="Потяните, чтобы изменить высоту поля ввода"
+                aria-label="Потяните, чтобы изменить высоту поля ввода"
+              >
+                <GripHorizontal className="h-3.5 w-3.5" />
+              </button>
+
+              <Textarea
+                placeholder="Type your message..."
+                rows={3}
+                value={currentMessage}
+                onChange={(e) => setCurrentMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                style={{ height: `${inputHeight}px` }}
+                className="resize-none overflow-y-auto focus:ring-2 focus:ring-primary focus:border-primary"
+              />
+            </div>
           </div>
           <div className="flex flex-row sm:flex-col gap-2 self-start">
             <Button

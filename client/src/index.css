@@ -203,6 +203,48 @@
   gap: 0.5rem;
 }
 
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-content-user code {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: inherit;
+}
+
+.markdown-content-user pre {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.markdown-content-user blockquote {
+  border-left-color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content-user th,
+.markdown-content-user td {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.markdown-content-user thead th {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.chat-markdown:not(.markdown-content-user) thead th {
+  background-color: hsl(0, 0%, 0%);
+  color: hsl(0, 0%, 100%);
+}
+
 /* Line clamping utility */
 .line-clamp-2 {
   display: -webkit-box;
